@@ -464,6 +464,24 @@ class _WebSocketTransformerImpl implements WebSocketTransformer {
   }
 }
 
+class _WebSocketPerMessageDeflateHelper {
+  final int windowsBits;
+
+  ZlibDecoder decoder;
+  ZlibEncoder encoder;
+
+  _WebSocketPerMessageDeflateHelper(this.windowsBits) {
+    decoder = new ZlibDecoder(windowsBits: windowsBits);
+    encoder = new ZlibEncoder(windowsBits: windowsBits);
+  }
+
+  List<int> processIncomingMessage(List<int> msg) {
+    var builder = new BytesBuilder();
+    builder.add(msg);
+    builder.add(const [0x00, 0x00, 0xff, 0xff]);
+    return decoder.convert(builder.takeBytes());
+  }
+}
 
 // TODO(ajohnsen): Make this transformer reusable.
 class _WebSocketOutgoingTransformer implements StreamTransformer, EventSink {
