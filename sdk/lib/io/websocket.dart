@@ -24,6 +24,52 @@ abstract class WebSocketStatus {
 }
 
 /**
+ * The [CompressionOptions] class allows you to control
+ * the options of WebSocket compression.
+ */
+class CompressionOptions {
+  static const CompressionOptions DEFAULT = const CompressionOptions();
+
+  /**
+   * Control whether the client will reuse it's compression instances.
+   */
+  final bool clientNoContextTakeover;
+
+  /**
+   * Sets the Max Window Bits.
+   */
+  final int clientMaxWindowBits;
+
+  /**
+   * Enables or disables WebSocket compression.
+   */
+  final bool enabled;
+
+  const CompressionOptions({this.clientNoContextTakeover: false,
+    this.clientMaxWindowBits, this.enabled: true});
+
+  /**
+   * Create a Compression Header
+   */
+  String _createHeader() {
+    if (!enabled) {
+      return "";
+    }
+
+    var header = "permessage-deflate";
+    if (clientNoContextTakeover) {
+      header += "; client_no_context_takeover";
+    }
+
+    if (clientMaxWindowBits != null) {
+      header += "; client_max_window_bits=${clientMaxWindowBits}";
+    }
+
+    return header;
+  }
+}
+
+/**
  * The [WebSocketTransformer] provides the ability to upgrade a
  * [HttpRequest] to a [WebSocket] connection. It supports both
  * upgrading a single [HttpRequest] and upgrading a stream of
@@ -63,8 +109,9 @@ abstract class WebSocketTransformer
    * completing with a [String]. The [String] must exist in the list of
    * protocols.
    */
-  factory WebSocketTransformer({protocolSelector(List<String> protocols)})
-      => new _WebSocketTransformerImpl(protocolSelector);
+  factory WebSocketTransformer({protocolSelector(List<String> protocols),
+    CompressionOptions compression: CompressionOptions.DEFAULT})
+      => new _WebSocketTransformerImpl(protocolSelector, compression);
 
   /**
    * Upgrades a [HttpRequest] to a [WebSocket] connection. If the
@@ -80,8 +127,9 @@ abstract class WebSocketTransformer
    * protocols.
    */
   static Future<WebSocket> upgrade(HttpRequest request,
-                                   {protocolSelector(List<String> protocols)}) {
-    return _WebSocketTransformerImpl._upgrade(request, protocolSelector);
+                                   {protocolSelector(List<String> protocols),
+                                    CompressionOptions compression: CompressionOptions.DEFAULT}) {
+    return _WebSocketTransformerImpl._upgrade(request, protocolSelector, compression);
   }
 
   /**
@@ -176,12 +224,12 @@ abstract class WebSocket implements Stream, StreamSink {
    * act as the server and will not mask its messages.
    */
   factory WebSocket.fromUpgradedSocket(Socket socket, {String protocol,
-        bool serverSide}) {
+        bool serverSide, CompressionOptions compression}) {
     if (serverSide == null) {
       throw new ArgumentError("The serverSide argument must be passed "
           "explicitly to WebSocket.fromUpgradedSocket.");
     }
-    return new _WebSocketImpl._fromSocket(socket, protocol, serverSide);
+    return new _WebSocketImpl._fromSocket(socket, protocol, compression, serverSide);
   }
 
   /**

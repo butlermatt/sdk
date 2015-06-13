@@ -54,6 +54,7 @@ class _WebSocketProtocolTransformer implements StreamTransformer, EventSink {
 
   int _state = START;
   bool _fin = false;
+  bool _compressed = false;
   int _opcode = -1;
   int _len = -1;
   bool _masked = false;
@@ -71,9 +72,8 @@ class _WebSocketProtocolTransformer implements StreamTransformer, EventSink {
   final List _maskingBytes = new List(4);
   final BytesBuilder _payload = new BytesBuilder(copy: false);
 
-  _WebSocketPerMessageDeflateHelper _deflateHelper;
-
-  _WebSocketProtocolTransformer([this._serverSide = false]);
+  _WebSocketPerMessageDeflate _deflate;
+  _WebSocketProtocolTransformer([this._serverSide = false, this._deflate]);
 
   Stream bind(Stream stream) {
     return new Stream.eventTransformed(
@@ -110,8 +110,13 @@ class _WebSocketProtocolTransformer implements StreamTransformer, EventSink {
       if (_state <= LEN_REST) {
         if (_state == START) {
           _fin = (byte & 0x80) != 0;
+
+          if ((byte & 0x60) == 1) {
+            _compressed = true;
+          }
+
           if ((byte & 0x70) != 0) {
-            // The RSV1, RSV2 bits RSV3 must be all zero.
+            // The RSV2 and RSV3 bits must be all zero.
             throw new WebSocketException("Protocol error");
           }
           _opcode = (byte & 0xF);
@@ -286,19 +291,16 @@ class _WebSocketProtocolTransformer implements StreamTransformer, EventSink {
 
   void _messageFrameEnd() {
     if (_fin) {
+      var bytes = _payload.takeBytes();
+      if (_deflate != null && _compressed) {
+        bytes = _deflate.processIncomingMessage(bytes);
+      }
+
       switch (_currentMessageType) {
         case _WebSocketMessageType.TEXT:
-          var bytes = _payload.takeBytes();
-          if (_deflateHelper != null) {
-            bytes = _deflateHelper.processIncomingMessage(bytes);
-          }
           _eventSink.add(UTF8.decode(bytes));
           break;
         case _WebSocketMessageType.BINARY:
-          var bytes = _payload.takeBytes();
-          if (_deflateHelper != null) {
-            bytes = _deflateHelper.processIncomingMessage(bytes);
-          }
           _eventSink.add(bytes);
           break;
       }
@@ -374,12 +376,13 @@ class _WebSocketTransformerImpl implements WebSocketTransformer {
   final StreamController<WebSocket> _controller =
       new StreamController<WebSocket>(sync: true);
   final Function _protocolSelector;
+  final CompressionOptions _compression;
 
-  _WebSocketTransformerImpl(this._protocolSelector);
+  _WebSocketTransformerImpl(this._protocolSelector, this._compression);
 
   Stream<WebSocket> bind(Stream<HttpRequest> stream) {
     stream.listen((request) {
-        _upgrade(request, _protocolSelector)
+        _upgrade(request, _protocolSelector, _compression)
             .then((WebSocket webSocket) => _controller.add(webSocket))
             .catchError(_controller.addError);
     }, onDone: () {
@@ -389,7 +392,8 @@ class _WebSocketTransformerImpl implements WebSocketTransformer {
     return _controller.stream;
   }
 
-  static Future<WebSocket> _upgrade(HttpRequest request, _protocolSelector) {
+  static Future<WebSocket> _upgrade(HttpRequest request, _protocolSelector,
+                                    CompressionOptions compression) {
     var response = request.response;
     if (!_isUpgradeRequest(request)) {
       // Send error response.
@@ -423,17 +427,14 @@ class _WebSocketTransformerImpl implements WebSocketTransformer {
 
       List<List<String>> extensions = extensionHeader.split(",").map((it) => it.split("; "));
 
-      _WebSocketPerMessageDeflateHelper deflateHelper;
-
-      if (extensions.any((x) => x[0] == "permessage-deflate")) {
-        response.headers.add("Sec-WebSocket-Extensions", "permessage-deflate");
-        deflateHelper = new _WebSocketPerMessageDeflateHelper();
+      if (compression.enabled && extensions.any((x) => x[0] == "permessage-deflate")) {
+        response.headers.add("Sec-WebSocket-Extensions", compression._createHeader());
       }
 
       response.headers.contentLength = 0;
       return response.detachSocket()
           .then((socket) => new _WebSocketImpl._fromSocket(
-                socket, protocol, true).._deflateHelper = deflateHelper);
+                socket, protocol, compression, true));
     }
 
     var protocols = request.headers['Sec-WebSocket-Protocol'];
@@ -490,18 +491,32 @@ class _WebSocketTransformerImpl implements WebSocketTransformer {
   }
 }
 
-class _WebSocketPerMessageDeflateHelper {
+class _WebSocketPerMessageDeflate {
+  bool noContextTakeover;
   int windowBits;
 
   ZLibDecoder decoder;
   ZLibEncoder encoder;
 
-  _WebSocketPerMessageDeflateHelper({this.windowBits}) {
+  _WebSocketPerMessageDeflate({this.windowBits, this.noContextTakeover}) {
     decoder = windowBits != null ? new ZLibDecoder(windowBits: windowBits) : new ZLibDecoder();
     encoder = windowBits != null ? new ZLibEncoder(windowBits: windowBits) : new ZLibEncoder();
   }
 
+  void _ensureDecoder() {
+    if (noContextTakeover || decoder == null) {
+      decoder = new ZLibDecoder(windowBits: windowBits);
+    }
+  }
+
+  void _ensureEncoder() {
+    if (noContextTakeover || encoder == null) {
+      encoder = new ZLibEncoder(windowBits: windowBits);
+    }
+  }
+
   List<int> processIncomingMessage(List<int> msg) {
+    _ensureDecoder();
     var builder = new BytesBuilder();
     builder.add(msg);
     builder.add(const [0x00, 0x00, 0xff, 0xff]);
@@ -509,6 +524,7 @@ class _WebSocketPerMessageDeflateHelper {
   }
 
   List<int> processOutgoingMessage(List<int> msg) {
+    _ensureEncoder();
     var c = encoder.convert(msg);
     c = c.sublist(0, c.length - 4);
     return c;
@@ -520,7 +536,7 @@ class _WebSocketOutgoingTransformer implements StreamTransformer, EventSink {
   final _WebSocketImpl webSocket;
   EventSink _eventSink;
 
-  _WebSocketPerMessageDeflateHelper _deflateHelper;
+  _WebSocketPerMessageDeflate _deflateHelper;
 
   _WebSocketOutgoingTransformer(this.webSocket);
 
@@ -566,6 +582,10 @@ class _WebSocketOutgoingTransformer implements StreamTransformer, EventSink {
           data = _deflateHelper.processOutgoingMessage(data);
         }
       }
+
+      if (_deflateHelper != null) {
+        data = _deflateHelper.processOutgoingMessage(data);
+      }
     } else {
       opcode = _WebSocketOpcode.TEXT;
     }
@@ -610,7 +630,6 @@ class _WebSocketOutgoingTransformer implements StreamTransformer, EventSink {
     header[index++] = 0x80 | opcode;
     // Determine size and position of length field.
     int lengthBytes = 1;
-    int firstLengthByte = 1;
     if (dataLength > 65535) {
       header[index++] = 127;
       lengthBytes = 8;
@@ -826,12 +845,13 @@ class _WebSocketImpl extends Stream with _ServiceObject implements WebSocket {
   int _outCloseCode;
   String _outCloseReason;
   Timer _closeTimer;
-  _WebSocketPerMessageDeflateHelper _deflateHelper;
+  _WebSocketPerMessageDeflate _deflate;
 
   static final HttpClient _httpClient = new HttpClient();
 
   static Future<WebSocket> connect(
-      String url, Iterable<String> protocols, Map<String, dynamic> headers) {
+      String url, Iterable<String> protocols, Map<String, dynamic> headers,
+      {CompressionOptions compression: CompressionOptions.DEFAULT}) {
     Uri uri = Uri.parse(url);
     if (uri.scheme != "ws" && uri.scheme != "wss") {
       throw new WebSocketException("Unsupported URL scheme '${uri.scheme}'");
@@ -919,27 +939,24 @@ class _WebSocketImpl extends Stream with _ServiceObject implements WebSocket {
 
         List<List<String>> extensions = extensionHeader.split(", ").map((it) => it.split("; "));
 
-        _WebSocketPerMessageDeflateHelper deflateHelper;
-
         if (extensions.any((x) => x[0] == "permessage-deflate")) {
-          response.headers.add("Sec-WebSocket-Extensions", "permessage-deflate");
-          deflateHelper = new _WebSocketPerMessageDeflateHelper();
+          response.headers.add("Sec-WebSocket-Extensions", compression._createHeader());
         }
 
         return response.detachSocket()
-            .then((socket) => new _WebSocketImpl._fromSocket(socket, protocol)
-              .._deflateHelper = deflateHelper);
+          .then((socket) => new _WebSocketImpl._fromSocket(socket, protocol, compression, false));
       });
   }
 
   _WebSocketImpl._fromSocket(this._socket, this.protocol,
-                             [this._serverSide = false]) {
+      CompressionOptions compression, [this._serverSide = false]) {
     _consumer = new _WebSocketConsumer(this, _socket);
     _sink = new _StreamSinkImpl(_consumer);
     _readyState = WebSocket.OPEN;
+    _deflate = new _WebSocketPerMessageDeflate(windowBits: compression.clientMaxWindowBits,
+      noContextTakeover: compression.clientNoContextTakeover);
 
-    var transformer = new _WebSocketProtocolTransformer(_serverSide);
-    transformer._deflateHelper = _deflateHelper;
+    var transformer = new _WebSocketProtocolTransformer(_serverSide, _deflate);
     _subscription = _socket.transform(transformer).listen(
         (data) {
           if (data is _WebSocketPing) {
