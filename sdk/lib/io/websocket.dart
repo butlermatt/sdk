@@ -28,7 +28,20 @@ abstract class WebSocketStatus {
  * the options of WebSocket compression.
  */
 class CompressionOptions {
+  /**
+   * Default WebSocket Compression options.
+   * Compression will be enabled with the following options:
+   * clientNoContextTakeover: false
+   * serverNoContextTakeover: false
+   * clientMaxWindowBits: 15
+   * serverMaxWindowBits: 15
+   */
   static const CompressionOptions DEFAULT = const CompressionOptions();
+
+  /**
+   * Disables WebSocket Compression.
+   */
+  static const CompressionOptions OFF = const CompressionOptions(enabled: false);
 
   /**
    * Control whether the client will reuse it's compression instances.
@@ -36,9 +49,19 @@ class CompressionOptions {
   final bool clientNoContextTakeover;
 
   /**
-   * Sets the Max Window Bits.
+   * Control whether the server will reuse it's compression instances.
+   */
+  final bool serverNoContextTakeover;
+
+  /**
+   * Sets the Max Window Bits for the Client.
    */
   final int clientMaxWindowBits;
+
+  /**
+   * Sets the Max Window Bits for the Server.
+   */
+  final int serverMaxWindowBits;
 
   /**
    * Enables or disables WebSocket compression.
@@ -46,23 +69,41 @@ class CompressionOptions {
   final bool enabled;
 
   const CompressionOptions({this.clientNoContextTakeover: false,
-    this.clientMaxWindowBits, this.enabled: true});
+    this.serverNoContextTakeover: false, this.clientMaxWindowBits,
+                           this.serverMaxWindowBits, this.enabled: true});
 
   /**
    * Create a Compression Header
    */
-  String _createHeader() {
+  String _createHeader([List<String> requested]) {
     if (!enabled) {
       return "";
     }
 
     var header = "permessage-deflate";
-    if (clientNoContextTakeover) {
+
+    if (requested == null) {
+      header += "; client_max_window_bits";
+    } else {
+      if (requested.contains("client_max_window_bits")) {
+        var myMaxWindowBits = clientMaxWindowBits == null ? 15 : clientMaxWindowBits;
+        header += "; client_max_window_bits=${myMaxWindowBits}";
+      }
+    }
+
+    if (clientNoContextTakeover && (requested != null
+      && requested.contains("client_no_context_takeover"))) {
       header += "; client_no_context_takeover";
     }
 
-    if (clientMaxWindowBits != null) {
-      header += "; client_max_window_bits=${clientMaxWindowBits}";
+    if (serverNoContextTakeover && (requested != null
+      && requested.contains("server_no_context_takeover"))) {
+      header += "; server_no_context_takeover";
+    }
+
+    if (requested != null) {
+      var mwb = serverMaxWindowBits == null ? 15 : serverMaxWindowBits;
+      header += "; server_max_window_bits=${mwb}";
     }
 
     return header;
@@ -224,7 +265,7 @@ abstract class WebSocket implements Stream, StreamSink {
    * act as the server and will not mask its messages.
    */
   factory WebSocket.fromUpgradedSocket(Socket socket, {String protocol,
-        bool serverSide, CompressionOptions compression}) {
+        bool serverSide, CompressionOptions compression: CompressionOptions.DEFAULT}) {
     if (serverSide == null) {
       throw new ArgumentError("The serverSide argument must be passed "
           "explicitly to WebSocket.fromUpgradedSocket.");
