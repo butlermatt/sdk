@@ -51,6 +51,11 @@ class _WebSocketProtocolTransformer implements StreamTransformer, EventSink {
   static const int PAYLOAD = 4;
   static const int CLOSED = 5;
   static const int FAILURE = 6;
+  static const int FIN = 0x80;
+  static const int RSV1 = 0x40;
+  static const int RSV2 = 0x20;
+  static const int RSV3 = 0x10;
+  static const int OPCODE = 0xF;
 
   int _state = START;
   bool _fin = false;
@@ -109,18 +114,18 @@ class _WebSocketProtocolTransformer implements StreamTransformer, EventSink {
       int byte = buffer[index];
       if (_state <= LEN_REST) {
         if (_state == START) {
-          _fin = (byte & 0x80) != 0;
+          _fin = (byte & FIN) != 0;
 
-          if ((byte & 0x40) != 0) {
+          if ((byte & RSV1) != 0) {
             _compressed = true;
           }
 
-          if ((byte & 0x20) != 0 || (byte & 0x10) != 0) {
+          if ((byte & RSV2) != 0 || (byte & RSV3) != 0) {
             // The RSV2 and RSV3 bits must be all zero.
             throw new WebSocketException("Protocol error");
           }
 
-          _opcode = (byte & 0xF);
+          _opcode = (byte & OPCODE);
 
           if (_opcode <= _WebSocketOpcode.BINARY) {
             if (_opcode == _WebSocketOpcode.CONTINUATION) {
@@ -421,23 +426,12 @@ class _WebSocketTransformerImpl implements WebSocketTransformer {
         response.headers.add("Sec-WebSocket-Protocol", protocol);
       }
 
-      var extensionHeader = request.headers.value("Sec-WebSocket-Extensions");
-
-      if (extensionHeader == null) {
-        extensionHeader = "";
-      }
-
-      Iterable<List<String>> extensions = extensionHeader.split(",").map((it) => it.split("; "));
-
-      if (compression.enabled && extensions.any((x) => x[0] == "permessage-deflate")) {
-        var opts = extensions.firstWhere((x) => x[0] == "permessage-deflate");
-        response.headers.add("Sec-WebSocket-Extensions", compression._createHeader(opts));
-      }
+      var deflate = _negotiateCompression(request, response, compression);
 
       response.headers.contentLength = 0;
       return response.detachSocket()
           .then((socket) => new _WebSocketImpl._fromSocket(
-                socket, protocol, compression, true));
+                socket, protocol, compression, true, deflate));
     }
 
     var protocols = request.headers['Sec-WebSocket-Protocol'];
@@ -464,6 +458,31 @@ class _WebSocketTransformerImpl implements WebSocketTransformer {
     } else {
       return upgrade(null);
     }
+  }
+
+  static _WebSocketPerMessageDeflate _negotiateCompression(HttpRequest request,
+                                    HttpResponse response,
+                                    CompressionOptions compression) {
+    var extensionHeader = request.headers.value("Sec-WebSocket-Extensions");
+
+    if (extensionHeader == null) {
+      extensionHeader = "";
+    }
+
+    Iterable<List<String>> extensions = extensionHeader.split(",").map((it) => it.split("; "));
+
+    if (compression.enabled && extensions.any((x) => x[0] == "permessage-deflate")) {
+      var opts = extensions.firstWhere((x) => x[0] == "permessage-deflate");
+      response.headers.add("Sec-WebSocket-Extensions", compression._createHeader(opts));
+      var noContextTakeover = opts.contains("server_no_context_takeover");
+      var deflate = new _WebSocketPerMessageDeflate(
+          noContextTakeover: noContextTakeover,
+          serverSide: true);
+
+      return deflate;
+    }
+
+    return null;
   }
 
   static bool _isUpgradeRequest(HttpRequest request) {
@@ -504,14 +523,15 @@ class _WebSocketPerMessageDeflate {
   ZLibEncoder encoder;
 
   _WebSocketPerMessageDeflate({this.clientMaxWindowBits,
-                              this.serverMaxWindowBits, this.noContextTakeover,
+                              this.serverMaxWindowBits,
+                              this.noContextTakeover,
                               this.serverSide: false}) {
     if (clientMaxWindowBits == null) {
-      clientMaxWindowBits = 15;
+      clientMaxWindowBits = _WebSocketImpl.DEFAULT_WINDOW_BITS;
     }
 
     if (serverMaxWindowBits == null) {
-      serverMaxWindowBits = 15;
+      serverMaxWindowBits = _WebSocketImpl.DEFAULT_WINDOW_BITS;
     }
   }
 
@@ -534,13 +554,22 @@ class _WebSocketPerMessageDeflate {
     var builder = new BytesBuilder();
     builder.add(msg);
     builder.add(const [0x00, 0x00, 0xff, 0xff]);
-    return decoder.convert(builder.takeBytes());
+    var result = decoder.convert(builder.takeBytes());
+    if (noContextTakeover) {
+      decoder = null;
+    }
+    print(result);
+    return result;
   }
 
   List<int> processOutgoingMessage(List<int> msg) {
     _ensureEncoder();
     var c = encoder.convert(msg);
     c = c.sublist(0, c.length - 4);
+    if (noContextTakeover) {
+      encoder = null;
+    }
+    print(c);
     return c;
   }
 }
@@ -581,20 +610,12 @@ class _WebSocketOutgoingTransformer implements StreamTransformer, EventSink {
       if (message is String) {
         opcode = _WebSocketOpcode.TEXT;
         data = UTF8.encode(message);
-
-        if (_deflateHelper != null) {
-          data = _deflateHelper.processOutgoingMessage(data);
-        }
       } else {
         if (message is !List<int>) {
           throw new ArgumentError(message);
         }
         opcode = _WebSocketOpcode.BINARY;
         data = message;
-
-        if (_deflateHelper != null) {
-          data = _deflateHelper.processOutgoingMessage(data);
-        }
       }
 
       if (_deflateHelper != null) {
@@ -626,7 +647,7 @@ class _WebSocketOutgoingTransformer implements StreamTransformer, EventSink {
   }
 
   void addFrame(int opcode, List<int> data) =>
-    createFrame(opcode, data, webSocket._serverSide, webSocket._deflate != null)
+    createFrame(opcode, data, webSocket._serverSide, _deflateHelper != null)
       .forEach((e) {
         _eventSink.add(e);
       });
@@ -852,6 +873,7 @@ class _WebSocketConsumer implements StreamConsumer {
 class _WebSocketImpl extends Stream with _ServiceObject implements WebSocket {
   // Use default Map so we keep order.
   static Map<int, _WebSocketImpl> _webSockets = new Map<int, _WebSocketImpl>();
+  static const int DEFAULT_WINDOW_BITS = 15;
 
   final String protocol;
 
@@ -917,8 +939,7 @@ class _WebSocketImpl extends Stream with _ServiceObject implements WebSocket {
             ..set(HttpHeaders.UPGRADE, "websocket")
             ..set("Sec-WebSocket-Key", nonce)
             ..set("Cache-Control", "no-cache")
-            ..set("Sec-WebSocket-Version", "13")
-            ..set("Sec-WebSocket-Extensions", "permessage-deflate");
+            ..set("Sec-WebSocket-Version", "13");
         if (protocols != null) {
           request.headers.add("Sec-WebSocket-Protocol", protocols.toList());
         }
@@ -961,50 +982,57 @@ class _WebSocketImpl extends Stream with _ServiceObject implements WebSocket {
         }
         var protocol = response.headers.value('Sec-WebSocket-Protocol');
 
-        String extensionHeader = response.headers.value('Sec-WebSocket-Extensions');
-
-        if (extensionHeader == null) {
-          extensionHeader = "";
-        }
-
-        Iterable<List<String>> extensions = extensionHeader
-          .split(", ")
-          .map((it) => it.split("; "));
-
-        _WebSocketPerMessageDeflate deflate;
-
-        if (compression.enabled && extensions.any((x) => x[0] == "permessage-deflate")) {
-          var opts = extensions.firstWhere((x) => x[0] == "permessage-deflate");
-          var noContextTakeover = opts.contains("client_no_context_takeover");
-
-          int getWindowBits(String type) {
-            var o = opts.firstWhere((x) =>
-              x.startsWith("${type}_max_window_bits="), orElse: () => null);
-
-            if (o == null) {
-              return 15;
-            }
-
-            try {
-              o = o.substring("client_max_window_bits=".length);
-              o = int.parse(o);
-            } catch (e) {
-              return 15;
-            }
-
-            return o;
-          }
-
-          deflate = new _WebSocketPerMessageDeflate(
-              clientMaxWindowBits: getWindowBits("client"),
-              serverMaxWindowBits: getWindowBits("server"),
-              noContextTakeover: noContextTakeover);
-        }
+        _WebSocketPerMessageDeflate deflate =
+          negotiateClientCompression(response, compression);
 
         return response.detachSocket()
           .then((socket) => new _WebSocketImpl._fromSocket(socket, protocol,
             compression, false, deflate));
       });
+  }
+
+  static _WebSocketPerMessageDeflate negotiateClientCompression(
+        HttpClientResponse response,
+        CompressionOptions compression) {
+    String extensionHeader = response.headers.value('Sec-WebSocket-Extensions');
+
+    if (extensionHeader == null) {
+      extensionHeader = "";
+    }
+
+    Iterable<List<String>> extensions = extensionHeader
+      .split(", ")
+      .map((it) => it.split("; "));
+
+    if (compression.enabled && extensions.any((x) => x[0] == "permessage-deflate")) {
+      var opts = extensions.firstWhere((x) => x[0] == "permessage-deflate");
+      var noContextTakeover = opts.contains("client_no_context_takeover");
+
+      int getWindowBits(String type) {
+        var o = opts.firstWhere((x) =>
+          x.startsWith("${type}_max_window_bits="), orElse: () => null);
+
+        if (o == null) {
+          return DEFAULT_WINDOW_BITS;
+        }
+
+        try {
+          o = o.substring("${type}_max_window_bits=".length);
+          o = int.parse(o);
+        } catch (e) {
+          return DEFAULT_WINDOW_BITS;
+        }
+
+        return o;
+      }
+
+      return new _WebSocketPerMessageDeflate(
+          clientMaxWindowBits: getWindowBits("client"),
+          serverMaxWindowBits: getWindowBits("server"),
+          noContextTakeover: noContextTakeover);
+    }
+
+    return null;
   }
 
   _WebSocketImpl._fromSocket(this._socket, this.protocol,
