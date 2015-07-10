@@ -84,14 +84,14 @@ class CompressionOptions {
       return "";
     }
 
-    var header = "permessage-deflate";
+    var header = _WebSocketImpl.PER_MESSAGE_DEFLATE;
 
     if (requested == null) {
       header += "; client_max_window_bits";
     } else {
       if (requested.contains("client_max_window_bits")) {
         var myMaxWindowBits =
-            clientMaxWindowBits == null ? 15 : clientMaxWindowBits;
+            clientMaxWindowBits == null ? _WebSocketImpl.DEFAULT_WINDOW_BITS : clientMaxWindowBits;
         header += "; client_max_window_bits=${myMaxWindowBits}";
       }
     }
@@ -109,7 +109,7 @@ class CompressionOptions {
     }
 
     if (requested != null) {
-      var mwb = serverMaxWindowBits == null ? 15 : serverMaxWindowBits;
+      var mwb = serverMaxWindowBits == null ? _WebSocketImpl.DEFAULT_WINDOW_BITS : serverMaxWindowBits;
       header += "; server_max_window_bits=${mwb}";
     }
 

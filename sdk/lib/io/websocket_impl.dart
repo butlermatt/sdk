@@ -469,10 +469,12 @@ class _WebSocketTransformerImpl implements WebSocketTransformer {
       extensionHeader = "";
     }
 
-    Iterable<List<String>> extensions = extensionHeader.split(",").map((it) => it.split("; "));
+    Iterable<List<String>> extensions = extensionHeader
+        .split(",")
+        .map((it) => it.split("; "));
 
-    if (compression.enabled && extensions.any((x) => x[0] == "permessage-deflate")) {
-      var opts = extensions.firstWhere((x) => x[0] == "permessage-deflate");
+    if (compression.enabled && extensions.any((x) => x[0] == _WebSocketImpl.PER_MESSAGE_DEFLATE)) {
+      var opts = extensions.firstWhere((x) => x[0] == _WebSocketImpl.PER_MESSAGE_DEFLATE);
       response.headers.add("Sec-WebSocket-Extensions", compression._createHeader(opts));
       var noContextTakeover = opts.contains("server_no_context_takeover");
       var deflate = new _WebSocketPerMessageDeflate(
@@ -558,7 +560,6 @@ class _WebSocketPerMessageDeflate {
     if (noContextTakeover) {
       decoder = null;
     }
-    print(result);
     return result;
   }
 
@@ -569,7 +570,6 @@ class _WebSocketPerMessageDeflate {
     if (noContextTakeover) {
       encoder = null;
     }
-    print(c);
     return c;
   }
 }
@@ -874,6 +874,7 @@ class _WebSocketImpl extends Stream with _ServiceObject implements WebSocket {
   // Use default Map so we keep order.
   static Map<int, _WebSocketImpl> _webSockets = new Map<int, _WebSocketImpl>();
   static const int DEFAULT_WINDOW_BITS = 15;
+  static const String PER_MESSAGE_DEFLATE = "permessage-deflate";
 
   final String protocol;
 
@@ -1004,8 +1005,8 @@ class _WebSocketImpl extends Stream with _ServiceObject implements WebSocket {
       .split(", ")
       .map((it) => it.split("; "));
 
-    if (compression.enabled && extensions.any((x) => x[0] == "permessage-deflate")) {
-      var opts = extensions.firstWhere((x) => x[0] == "permessage-deflate");
+    if (compression.enabled && extensions.any((x) => x[0] == PER_MESSAGE_DEFLATE)) {
+      var opts = extensions.firstWhere((x) => x[0] == PER_MESSAGE_DEFLATE);
       var noContextTakeover = opts.contains("client_no_context_takeover");
 
       int getWindowBits(String type) {
