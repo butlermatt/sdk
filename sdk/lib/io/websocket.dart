@@ -90,8 +90,9 @@ class CompressionOptions {
       header += "; client_max_window_bits";
     } else {
       if (requested.contains("client_max_window_bits")) {
-        var myMaxWindowBits =
-            clientMaxWindowBits == null ? _WebSocketImpl.DEFAULT_WINDOW_BITS : clientMaxWindowBits;
+        var myMaxWindowBits = clientMaxWindowBits == null
+            ? _WebSocketImpl.DEFAULT_WINDOW_BITS
+            : clientMaxWindowBits;
         header += "; client_max_window_bits=${myMaxWindowBits}";
       }
     }
@@ -109,7 +110,9 @@ class CompressionOptions {
     }
 
     if (requested != null) {
-      var mwb = serverMaxWindowBits == null ? _WebSocketImpl.DEFAULT_WINDOW_BITS : serverMaxWindowBits;
+      var mwb = serverMaxWindowBits == null
+          ? _WebSocketImpl.DEFAULT_WINDOW_BITS
+          : serverMaxWindowBits;
       header += "; server_max_window_bits=${mwb}";
     }
 
