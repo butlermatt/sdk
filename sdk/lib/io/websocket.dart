@@ -70,8 +70,8 @@ class CompressionOptions {
   final bool enabled;
 
   const CompressionOptions(
-      {this.clientNoContextTakeover: false,
-      this.serverNoContextTakeover: false,
+      {this.clientNoContextTakeover: true,
+      this.serverNoContextTakeover: true,
       this.clientMaxWindowBits,
       this.serverMaxWindowBits,
       this.enabled: true});
@@ -84,18 +84,9 @@ class CompressionOptions {
       return "";
     }
 
-    var header = _WebSocketImpl.PER_MESSAGE_DEFLATE;
+    var info = new List(2);
 
-    if (requested == null) {
-      header += "; client_max_window_bits";
-    } else {
-      if (requested.contains("client_max_window_bits")) {
-        var myMaxWindowBits = clientMaxWindowBits == null
-            ? _WebSocketImpl.DEFAULT_WINDOW_BITS
-            : clientMaxWindowBits;
-        header += "; client_max_window_bits=${myMaxWindowBits}";
-      }
-    }
+    var header = _WebSocketImpl.PER_MESSAGE_DEFLATE;
 
     if (clientNoContextTakeover &&
         (requested != null &&
@@ -109,14 +100,29 @@ class CompressionOptions {
       header += "; server_no_context_takeover";
     }
 
-    if (requested != null) {
+    if (requested != null && requested.any((x) => x.startsWith("server_max_window_bits="))) {
+      var part = requested.firstWhere((x) => x.startsWith("server_max_window_bits=")).substring(23);
       var mwb = serverMaxWindowBits == null
-          ? _WebSocketImpl.DEFAULT_WINDOW_BITS
+          ? int.parse(part, onError: (source) => _WebSocketImpl.DEFAULT_WINDOW_BITS)
           : serverMaxWindowBits;
       header += "; server_max_window_bits=${mwb}";
+      info[1] = mwb;
+    } else {
+      info[1] = _WebSocketImpl.DEFAULT_WINDOW_BITS;
     }
 
-    return header;
+    if (requested == null) {
+      header += "; client_max_window_bits";
+    } else {
+      if (requested.contains("client_max_window_bits")) {
+        var myMaxWindowBits = info[1];
+        header += "; client_max_window_bits=${myMaxWindowBits}";
+      }
+    }
+
+    info[0] = header;
+
+    return info;
   }
 }
 
@@ -251,8 +257,9 @@ abstract class WebSocket implements Stream, StreamSink {
    * authentication when setting up the connection.
    */
   static Future<WebSocket> connect(String url,
-          {Iterable<String> protocols, Map<String, dynamic> headers}) =>
-      _WebSocketImpl.connect(url, protocols, headers);
+          {Iterable<String> protocols, Map<String, dynamic> headers,
+            CompressionOptions compression: CompressionOptions.DEFAULT}) =>
+      _WebSocketImpl.connect(url, protocols, headers, compression: compression);
 
   @Deprecated('This constructor will be removed in Dart 2.0. Use `implements`'
       ' instead of `extends` if implementing this abstract class.')

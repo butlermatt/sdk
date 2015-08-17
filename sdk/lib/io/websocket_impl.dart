@@ -111,18 +111,20 @@ class _WebSocketProtocolTransformer implements StreamTransformer, EventSink {
       int byte = buffer[index];
       if (_state <= LEN_REST) {
         if (_state == START) {
-          _fin = (byte & FIN) != 0;
+          _fin = (byte & 0x80) != 0;
+          var rsv = (byte & 0x70) >> 4;
 
-          if ((byte & RSV1) != 0) {
-            _compressed = true;
-          }
-
-          if ((byte & RSV2) != 0 || (byte & RSV3) != 0) {
-            // The RSV2 and RSV3 bits must be all zero.
+          if (rsv != 0 && rsv != 4) {
+            // The RSV1, RSV2 bits RSV3 must be all zero.
             throw new WebSocketException("Protocol error");
           }
 
-          _opcode = (byte & OPCODE);
+          if (rsv == 4) {
+            _compressed = true;
+          } else {
+            _compressed = false;
+          }
+          _opcode = (byte & 0x0F);
 
           if (_opcode <= _WebSocketOpcode.BINARY) {
             if (_opcode == _WebSocketOpcode.CONTINUATION) {
@@ -465,11 +467,19 @@ class _WebSocketTransformerImpl implements WebSocketTransformer {
         (x) => x[0] == _WebSocketImpl.PER_MESSAGE_DEFLATE,
         orElse: () => null);
     if (compression.enabled && perMessageDeflate != null) {
+      var info = compression._createHeader(perMessageDeflate);
+
+
+
       response.headers.add("Sec-WebSocket-Extensions",
-          compression._createHeader(perMessageDeflate));
-      var noContextTakeover = perMessageDeflate.contains("server_no_context_takeover");
+          info[0]);
+      var serverNoContextTakeover = perMessageDeflate.contains("server_no_context_takeover");
+      var clientNoContextTakeover = perMessageDeflate.contains("client_no_context_takeover");
       var deflate = new _WebSocketPerMessageDeflate(
-          noContextTakeover: noContextTakeover, serverSide: true);
+          serverNoContextTakeover: serverNoContextTakeover,
+          clientNoContextTakeover: clientNoContextTakeover,
+          serverMaxWindowBits: info[1],
+          clientMaxWindowBits: info[1], serverSide: true);
 
       return deflate;
     }
@@ -506,18 +516,20 @@ class _WebSocketTransformerImpl implements WebSocketTransformer {
 }
 
 class _WebSocketPerMessageDeflate {
-  bool noContextTakeover;
+  bool serverNoContextTakeover;
+  bool clientNoContextTakeover;
   int clientMaxWindowBits;
   int serverMaxWindowBits;
   bool serverSide;
 
-  ZLibDecoder decoder;
-  ZLibEncoder encoder;
+  _Filter decoder;
+  _Filter encoder;
 
   _WebSocketPerMessageDeflate(
       {this.clientMaxWindowBits,
       this.serverMaxWindowBits,
-      this.noContextTakeover,
+      this.serverNoContextTakeover: false,
+      this.clientNoContextTakeover: false,
       this.serverSide: false}) {
     if (clientMaxWindowBits == null) {
       clientMaxWindowBits = _WebSocketImpl.DEFAULT_WINDOW_BITS;
@@ -529,26 +541,47 @@ class _WebSocketPerMessageDeflate {
   }
 
   void _ensureDecoder() {
-    if (noContextTakeover || decoder == null) {
-      decoder = new ZLibDecoder(
-          windowBits: serverSide ? clientMaxWindowBits : serverMaxWindowBits);
+    if (decoder == null) {
+      decoder = _Filter._newZLibInflateFilter(
+        serverSide ? clientMaxWindowBits : serverMaxWindowBits,
+        null,
+        true);
     }
   }
 
   void _ensureEncoder() {
-    if (noContextTakeover || encoder == null) {
-      encoder = new ZLibEncoder(
-          windowBits: serverSide ? serverMaxWindowBits : clientMaxWindowBits);
+    if (encoder == null) {
+      encoder = _Filter._newZLibDeflateFilter(
+        false,
+        ZLibOption.DEFAULT_LEVEL,
+        serverSide ? serverMaxWindowBits : clientMaxWindowBits,
+        ZLibOption.DEFAULT_MEM_LEVEL,
+        ZLibOption.STRATEGY_DEFAULT,
+        null,
+        true);
     }
   }
 
   List<int> processIncomingMessage(List<int> msg) {
     _ensureDecoder();
-    var builder = new BytesBuilder();
-    builder.add(msg);
-    builder.add(const [0x00, 0x00, 0xff, 0xff]);
-    var result = decoder.convert(builder.takeBytes());
-    if (noContextTakeover) {
+
+    var b = [];
+    b.addAll(msg);
+    b.addAll(const [0x00, 0x00, 0xff, 0xff]);
+
+    decoder.process(b, 0, b.length);
+    var reuse = !(serverSide ? clientNoContextTakeover : serverNoContextTakeover);
+    var result = [];
+    var out;
+
+    while ((out = decoder.processed(flush: reuse)) != null) {
+      result.addAll(out);
+    }
+
+    decoder.processed(flush: reuse);
+
+    if (!reuse) {
+      decoder.end();
       decoder = null;
     }
     return result;
@@ -556,12 +589,26 @@ class _WebSocketPerMessageDeflate {
 
   List<int> processOutgoingMessage(List<int> msg) {
     _ensureEncoder();
-    var c = encoder.convert(msg);
-    c = c.sublist(0, c.length - 4);
-    if (noContextTakeover) {
+    var reuse = !(serverSide ? serverNoContextTakeover : clientNoContextTakeover);
+    var result = [];
+    var out;
+
+    encoder.process(msg, 0, msg.length);
+
+    while ((out = encoder.processed(flush: reuse)) != null) {
+      result.addAll(out);
+    }
+
+    if (serverSide ? serverNoContextTakeover : clientNoContextTakeover) {
+      encoder.end();
       encoder = null;
     }
-    return c;
+
+    if (result.length > 4) {
+      result = result.sublist(0, result.length - 4);
+    }
+
+    return result;
   }
 }
 
@@ -572,7 +619,9 @@ class _WebSocketOutgoingTransformer implements StreamTransformer, EventSink {
 
   _WebSocketPerMessageDeflate _deflateHelper;
 
-  _WebSocketOutgoingTransformer(this.webSocket);
+  _WebSocketOutgoingTransformer(this.webSocket) {
+    _deflateHelper = webSocket._deflate;
+  }
 
   Stream bind(Stream stream) {
     return new Stream.eventTransformed(stream, (EventSink eventSink) {
@@ -636,10 +685,11 @@ class _WebSocketOutgoingTransformer implements StreamTransformer, EventSink {
   }
 
   void addFrame(int opcode, List<int> data) =>
-      createFrame(opcode, data, webSocket._serverSide, _deflateHelper != null)
-          .forEach((e) {
+    createFrame(opcode, data, webSocket._serverSide,
+      _deflateHelper != null && (opcode == _WebSocketOpcode.TEXT || opcode == _WebSocketOpcode.BINARY))
+      .forEach((e) {
         _eventSink.add(e);
-      });
+    });
 
   static Iterable createFrame(
       int opcode, List<int> data, bool serverSide, bool compressed) {
@@ -654,16 +704,14 @@ class _WebSocketOutgoingTransformer implements StreamTransformer, EventSink {
     }
     Uint8List header = new Uint8List(headerSize);
     int index = 0;
-    // Set FIN and opcode.
-    var hoc = 0;
 
-    hoc |= 0x80;
-
+    var rsv = 0;
     if (compressed) {
-      hoc |= 0x40;
+      rsv = 4;
     }
 
-    hoc |= opcode & 0xF;
+    // Set FIN and opcode.
+    var hoc = (1 << 7) | (rsv % 8) << 4 | (opcode % 128);
 
     header[index++] = hoc;
     // Determine size and position of length field.
@@ -988,7 +1036,8 @@ class _WebSocketImpl extends Stream with _ServiceObject implements WebSocket {
     if (compression.enabled &&
         extensions.any((x) => x[0] == PER_MESSAGE_DEFLATE)) {
       var opts = extensions.firstWhere((x) => x[0] == PER_MESSAGE_DEFLATE);
-      var noContextTakeover = opts.contains("client_no_context_takeover");
+      var serverNoContextTakeover = opts.contains("server_no_context_takeover");
+      var clientNoContextTakeover = opts.contains("client_no_context_takeover");
 
       int getWindowBits(String type) {
         var o = opts.firstWhere((x) => x.startsWith("${type}_max_window_bits="),
@@ -1011,7 +1060,8 @@ class _WebSocketImpl extends Stream with _ServiceObject implements WebSocket {
       return new _WebSocketPerMessageDeflate(
           clientMaxWindowBits: getWindowBits("client"),
           serverMaxWindowBits: getWindowBits("server"),
-          noContextTakeover: noContextTakeover);
+          clientNoContextTakeover: clientNoContextTakeover,
+          serverNoContextTakeover: serverNoContextTakeover);
     }
 
     return null;
@@ -1035,7 +1085,7 @@ class _WebSocketImpl extends Stream with _ServiceObject implements WebSocket {
       } else {
         _controller.add(data);
       }
-    }, onError: (error) {
+    }, onError: (error, stackTrace) {
       if (_closeTimer != null) _closeTimer.cancel();
       if (error is FormatException) {
         _close(WebSocketStatus.INVALID_FRAME_PAYLOAD_DATA);
