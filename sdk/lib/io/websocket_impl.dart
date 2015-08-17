@@ -469,8 +469,6 @@ class _WebSocketTransformerImpl implements WebSocketTransformer {
     if (compression.enabled && perMessageDeflate != null) {
       var info = compression._createHeader(perMessageDeflate);
 
-
-
       response.headers.add("Sec-WebSocket-Extensions",
           info[0]);
       var serverNoContextTakeover = perMessageDeflate.contains("server_no_context_takeover");

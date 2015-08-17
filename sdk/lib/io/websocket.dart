@@ -70,8 +70,8 @@ class CompressionOptions {
   final bool enabled;
 
   const CompressionOptions(
-      {this.clientNoContextTakeover: true,
-      this.serverNoContextTakeover: true,
+      {this.clientNoContextTakeover: false,
+      this.serverNoContextTakeover: false,
       this.clientMaxWindowBits,
       this.serverMaxWindowBits,
       this.enabled: true});
@@ -79,9 +79,9 @@ class CompressionOptions {
   /**
    * Create a Compression Header
    */
-  String _createHeader([List<String> requested]) {
+  List _createHeader([List<String> requested]) {
     if (!enabled) {
-      return "";
+      return ["", 0];
     }
 
     var info = new List(2);
