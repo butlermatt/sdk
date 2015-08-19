@@ -585,7 +585,6 @@ class SecurityConfiguration {
       var url = '${secure ? "wss" : "ws"}://$HOST_NAME:${server.port}/';
       WebSocket.connect(url, compression: options).then((websocket) {
         var future = websocket.listen((message) {
-          print(message);
           Expect.equals("Hello World", message);
         }).asFuture();
         websocket.add("Hello World");
