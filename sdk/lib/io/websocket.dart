@@ -100,10 +100,14 @@ class CompressionOptions {
       header += "; server_no_context_takeover";
     }
 
-    if (requested != null && requested.any((x) => x.startsWith("server_max_window_bits="))) {
-      var part = requested.firstWhere((x) => x.startsWith("server_max_window_bits=")).substring(23);
+    if (requested != null &&
+        requested.any((x) => x.startsWith("server_max_window_bits="))) {
+      var part = requested
+          .firstWhere((x) => x.startsWith("server_max_window_bits="))
+          .substring(23);
       var mwb = serverMaxWindowBits == null
-          ? int.parse(part, onError: (source) => _WebSocketImpl.DEFAULT_WINDOW_BITS)
+          ? int.parse(part,
+              onError: (source) => _WebSocketImpl.DEFAULT_WINDOW_BITS)
           : serverMaxWindowBits;
       header += "; server_max_window_bits=${mwb}";
       info[1] = mwb;
@@ -257,8 +261,9 @@ abstract class WebSocket implements Stream, StreamSink {
    * authentication when setting up the connection.
    */
   static Future<WebSocket> connect(String url,
-          {Iterable<String> protocols, Map<String, dynamic> headers,
-            CompressionOptions compression: CompressionOptions.DEFAULT}) =>
+          {Iterable<String> protocols,
+          Map<String, dynamic> headers,
+          CompressionOptions compression: CompressionOptions.DEFAULT}) =>
       _WebSocketImpl.connect(url, protocols, headers, compression: compression);
 
   @Deprecated('This constructor will be removed in Dart 2.0. Use `implements`'

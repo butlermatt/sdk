@@ -469,15 +469,17 @@ class _WebSocketTransformerImpl implements WebSocketTransformer {
     if (compression.enabled && perMessageDeflate != null) {
       var info = compression._createHeader(perMessageDeflate);
 
-      response.headers.add("Sec-WebSocket-Extensions",
-          info[0]);
-      var serverNoContextTakeover = perMessageDeflate.contains("server_no_context_takeover");
-      var clientNoContextTakeover = perMessageDeflate.contains("client_no_context_takeover");
+      response.headers.add("Sec-WebSocket-Extensions", info[0]);
+      var serverNoContextTakeover =
+          perMessageDeflate.contains("server_no_context_takeover");
+      var clientNoContextTakeover =
+          perMessageDeflate.contains("client_no_context_takeover");
       var deflate = new _WebSocketPerMessageDeflate(
           serverNoContextTakeover: serverNoContextTakeover,
           clientNoContextTakeover: clientNoContextTakeover,
           serverMaxWindowBits: info[1],
-          clientMaxWindowBits: info[1], serverSide: true);
+          clientMaxWindowBits: info[1],
+          serverSide: true);
 
       return deflate;
     }
@@ -541,22 +543,20 @@ class _WebSocketPerMessageDeflate {
   void _ensureDecoder() {
     if (decoder == null) {
       decoder = _Filter._newZLibInflateFilter(
-        serverSide ? clientMaxWindowBits : serverMaxWindowBits,
-        null,
-        true);
+          serverSide ? clientMaxWindowBits : serverMaxWindowBits, null, true);
     }
   }
 
   void _ensureEncoder() {
     if (encoder == null) {
       encoder = _Filter._newZLibDeflateFilter(
-        false,
-        ZLibOption.DEFAULT_LEVEL,
-        serverSide ? serverMaxWindowBits : clientMaxWindowBits,
-        ZLibOption.DEFAULT_MEM_LEVEL,
-        ZLibOption.STRATEGY_DEFAULT,
-        null,
-        true);
+          false,
+          ZLibOption.DEFAULT_LEVEL,
+          serverSide ? serverMaxWindowBits : clientMaxWindowBits,
+          ZLibOption.DEFAULT_MEM_LEVEL,
+          ZLibOption.STRATEGY_DEFAULT,
+          null,
+          true);
     }
   }
 
@@ -568,7 +568,8 @@ class _WebSocketPerMessageDeflate {
     data.addAll(const [0x00, 0x00, 0xff, 0xff]);
 
     decoder.process(data, 0, data.length);
-    var reuse = !(serverSide ? clientNoContextTakeover : serverNoContextTakeover);
+    var reuse =
+        !(serverSide ? clientNoContextTakeover : serverNoContextTakeover);
     var result = [];
     var out;
 
@@ -587,7 +588,8 @@ class _WebSocketPerMessageDeflate {
 
   List<int> processOutgoingMessage(List<int> msg) {
     _ensureEncoder();
-    var reuse = !(serverSide ? serverNoContextTakeover : clientNoContextTakeover);
+    var reuse =
+        !(serverSide ? serverNoContextTakeover : clientNoContextTakeover);
     var result = [];
     var out;
 
@@ -682,12 +684,15 @@ class _WebSocketOutgoingTransformer implements StreamTransformer, EventSink {
     _eventSink.close();
   }
 
-  void addFrame(int opcode, List<int> data) =>
-    createFrame(opcode, data, webSocket._serverSide,
-      _deflateHelper != null && (opcode == _WebSocketOpcode.TEXT || opcode == _WebSocketOpcode.BINARY))
-      .forEach((e) {
+  void addFrame(int opcode, List<int> data) => createFrame(
+          opcode,
+          data,
+          webSocket._serverSide,
+          _deflateHelper != null &&
+              (opcode == _WebSocketOpcode.TEXT ||
+                  opcode == _WebSocketOpcode.BINARY)).forEach((e) {
         _eventSink.add(e);
-    });
+      });
 
   static Iterable createFrame(
       int opcode, List<int> data, bool serverSide, bool compressed) {
