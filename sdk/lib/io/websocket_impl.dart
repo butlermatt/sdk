@@ -563,11 +563,11 @@ class _WebSocketPerMessageDeflate {
   List<int> processIncomingMessage(List<int> msg) {
     _ensureDecoder();
 
-    var b = [];
-    b.addAll(msg);
-    b.addAll(const [0x00, 0x00, 0xff, 0xff]);
+    var data = [];
+    data.addAll(msg);
+    data.addAll(const [0x00, 0x00, 0xff, 0xff]);
 
-    decoder.process(b, 0, b.length);
+    decoder.process(data, 0, data.length);
     var reuse = !(serverSide ? clientNoContextTakeover : serverNoContextTakeover);
     var result = [];
     var out;
