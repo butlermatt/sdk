@@ -294,6 +294,8 @@ class _WebSocketProtocolTransformer implements StreamTransformer, EventSink {
     }
   }
 
+  Utf8Decoder _utfDecoder;
+
   void _messageFrameEnd() {
     if (_fin) {
       var bytes = _payload.takeBytes();
@@ -303,7 +305,10 @@ class _WebSocketProtocolTransformer implements StreamTransformer, EventSink {
 
       switch (_currentMessageType) {
         case _WebSocketMessageType.TEXT:
-          _eventSink.add(UTF8.decode(bytes));
+          if (_utfDecoder == null) {
+            _utfDecoder = new Utf8Decoder();
+          }
+          _eventSink.add(_utfDecoder.convert(bytes));
           break;
         case _WebSocketMessageType.BINARY:
           _eventSink.add(bytes);
@@ -647,7 +652,10 @@ class _WebSocketOutgoingTransformer implements StreamTransformer, EventSink {
     if (message != null) {
       if (message is String) {
         opcode = _WebSocketOpcode.TEXT;
-        data = UTF8.encode(message);
+        if (_utfEncoder == null) {
+          _utfEncoder = new Utf8Encoder();
+        }
+        data = _utfEncoder.convert(message);
       } else {
         if (message is! List<int>) {
           throw new ArgumentError(message);
@@ -664,6 +672,8 @@ class _WebSocketOutgoingTransformer implements StreamTransformer, EventSink {
     }
     addFrame(opcode, data);
   }
+
+  Utf8Encoder _utfEncoder;
 
   void addError(Object error, [StackTrace stackTrace]) =>
       _eventSink.addError(error, stackTrace);
