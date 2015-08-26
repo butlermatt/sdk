@@ -294,7 +294,7 @@ class _WebSocketProtocolTransformer implements StreamTransformer, EventSink {
     }
   }
 
-  Utf8Decoder _utfDecoder;
+  static Utf8Decoder _utfDecoder;
 
   void _messageFrameEnd() {
     if (_fin) {
@@ -673,7 +673,7 @@ class _WebSocketOutgoingTransformer implements StreamTransformer, EventSink {
     addFrame(opcode, data);
   }
 
-  Utf8Encoder _utfEncoder;
+  static Utf8Encoder _utfEncoder;
 
   void addError(Object error, [StackTrace stackTrace]) =>
       _eventSink.addError(error, stackTrace);
