@@ -35,7 +35,7 @@ class SecurityConfiguration {
 
   Future<WebSocket> createClient(int port) =>
       // TODO(whesse): Add client context argument to WebSocket.connect
-  WebSocket.connect('${secure ? "wss" : "ws"}://$HOST_NAME:$port/');
+      WebSocket.connect('${secure ? "wss" : "ws"}://$HOST_NAME:$port/');
 
   void testCompressionSupport(bool enabled, bool allowContextTakeover) {
     asyncStart();
