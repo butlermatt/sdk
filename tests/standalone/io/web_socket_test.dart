@@ -560,42 +560,6 @@ class SecurityConfiguration {
     });
   }
 
-  void testCompressionSupport(bool enabled, bool allowContextTakeover) {
-    asyncStart();
-
-    var options = new CompressionOptions(
-      enabled: enabled,
-      serverNoContextTakeover: allowContextTakeover,
-      clientNoContextTakeover: allowContextTakeover);
-
-    createServer().then((server) {
-      server.listen((request) {
-        Expect.isTrue(WebSocketTransformer.isUpgradeRequest(request));
-        WebSocketTransformer.upgrade(request, compression: options).then((webSocket) {
-          webSocket.listen((message) {
-            Expect.equals("Hello World", message);
-
-            webSocket.add(message);
-            webSocket.close();
-          });
-          webSocket.add("Hello World");
-        });
-      });
-
-      var url = '${secure ? "wss" : "ws"}://$HOST_NAME:${server.port}/';
-      WebSocket.connect(url, compression: options).then((websocket) {
-        var future = websocket.listen((message) {
-          Expect.equals("Hello World", message);
-        }).asFuture();
-        websocket.add("Hello World");
-        return future;
-      }).then((_) {
-        server.close();
-        asyncEnd();
-      });
-    });
-  }
-
   void runTests() {
     testRequestResponseClientCloses(2, null, null, 1);
     testRequestResponseClientCloses(2, 3001, null, 2);
@@ -619,9 +583,6 @@ class SecurityConfiguration {
     testNoUpgrade();
     testUsePOST();
     testConnections(10, 3002, "Got tired");
-    testCompressionSupport(false, false);
-    testCompressionSupport(true, false);
-    testCompressionSupport(true, true);
     testIndividualUpgrade(5);
     testFromUpgradedSocket();
     testAdditionalHeaders();
