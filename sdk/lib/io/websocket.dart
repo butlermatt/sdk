@@ -76,16 +76,54 @@ class CompressionOptions {
       this.serverMaxWindowBits,
       this.enabled: true});
 
-  /**
-   * Create a Compression Header
-   */
+  /// Parses list of requested server headers to return server compression
+  /// response headers. Uses [serverMaxWindowBits] value if set, otherwise will
+  /// attempt to use value from headers. Defaults to
+  /// [WebSocket.DEFAULT_WINDOW_BITS]
+  List _createServerResponseHeader(List<String> requested) {
+    var info = new List(2);
+
+    if (requested.any((x) => x.startsWith("server_max_window_bits="))) {
+      var part = requested
+          .firstWhere((x) => x.startsWith("server_max_window_bits="))
+          .substring(23);
+      var mwb = serverMaxWindowBits == null
+          ? int.parse(part,
+          onError: (source) => _WebSocketImpl.DEFAULT_WINDOW_BITS)
+          : serverMaxWindowBits;
+      info[0] = "; server_max_window_bits=${mwb}";
+      info[1] = mwb;
+    } else {
+      info[1] = _WebSocketImpl.DEFAULT_WINDOW_BITS;
+    }
+    return info;
+  }
+
+  /// Returns default values for client compression request headers.
+  List _createClientRequestHeader(List<String> requested) {
+    var info = new List(2);
+
+    info[1] = _WebSocketImpl.DEFAULT_WINDOW_BITS;
+    if (request != null &&
+        requested.contains("client_max_window_bits")) {
+      info[0] = "; client_max_window_bits=${info[1]}";
+    } else {
+      info[0] = "; client_max_window_bits";
+    }
+
+    return info;
+  }
+
+  /// Create a Compression Header. If [requested] is null or contains
+  /// client request headers, returns Client compression request headers.
+  /// If [requested] contains server response headers this method returns
+  /// a Server compression response header.
   List _createHeader([List<String> requested]) {
     if (!enabled) {
       return ["", 0];
     }
 
     var info = new List(2);
-
     var header = _WebSocketImpl.PER_MESSAGE_DEFLATE;
 
     if (clientNoContextTakeover &&
@@ -100,28 +138,15 @@ class CompressionOptions {
       header += "; server_no_context_takeover";
     }
 
-    if (requested != null &&
-        requested.any((x) => x.startsWith("server_max_window_bits="))) {
-      var part = requested
-          .firstWhere((x) => x.startsWith("server_max_window_bits="))
-          .substring(23);
-      var mwb = serverMaxWindowBits == null
-          ? int.parse(part,
-              onError: (source) => _WebSocketImpl.DEFAULT_WINDOW_BITS)
-          : serverMaxWindowBits;
-      header += "; server_max_window_bits=${mwb}";
-      info[1] = mwb;
+    if (requested == null ||
+        requested.contains("client_max_window_bits")) {
+      var clientList = _createClientRequestHeader();
+      header += clientList[0];
+      info[1] = clientList[1];
     } else {
-      info[1] = _WebSocketImpl.DEFAULT_WINDOW_BITS;
-    }
-
-    if (requested == null) {
-      header += "; client_max_window_bits";
-    } else {
-      if (requested.contains("client_max_window_bits")) {
-        var myMaxWindowBits = info[1];
-        header += "; client_max_window_bits=${myMaxWindowBits}";
-      }
+      var headerList = _createServerResponseHeader(reponse);
+      header += headerList[0];
+      info[1] = headerList[1];
     }
 
     info[0] = header;
