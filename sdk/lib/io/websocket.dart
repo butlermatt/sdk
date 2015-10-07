@@ -104,7 +104,7 @@ class CompressionOptions {
     var info = new List(2);
 
     info[1] = _WebSocketImpl.DEFAULT_WINDOW_BITS;
-    if (request != null &&
+    if (requested != null &&
         requested.contains("client_max_window_bits")) {
       info[0] = "; client_max_window_bits=${info[1]}";
     } else {
@@ -140,11 +140,11 @@ class CompressionOptions {
 
     if (requested == null ||
         requested.contains("client_max_window_bits")) {
-      var clientList = _createClientRequestHeader();
+      var clientList = _createClientRequestHeader(requested);
       header += clientList[0];
       info[1] = clientList[1];
     } else {
-      var headerList = _createServerResponseHeader(reponse);
+      var headerList = _createServerResponseHeader(requested);
       header += headerList[0];
       info[1] = headerList[1];
     }
