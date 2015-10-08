@@ -98,9 +98,8 @@ class _WebSocketProtocolTransformer implements StreamTransformer, EventSink {
    * Process data received from the underlying communication channel.
    */
   void add(Uint8List buffer) {
-    int count = buffer.length;
     int index = 0;
-    int lastIndex = count;
+    int lastIndex = buffer.length;
     if (_state == CLOSED) {
       throw new WebSocketException("Data on closed connection");
     }
@@ -111,11 +110,11 @@ class _WebSocketProtocolTransformer implements StreamTransformer, EventSink {
       int byte = buffer[index];
       if (_state <= LEN_REST) {
         if (_state == START) {
-          _fin = (byte & 0x80) != 0;
-          var rsv = (byte & 0x70) >> 4;
+          _fin = (byte & FIN) != 0;
+          var rsv = (byte & (RSV1 | RSV2 | RSV3)) >> 4;
 
           if (rsv != 0 && rsv != 4) {
-            // The RSV1, RSV2 bits RSV3 must be all zero.
+            // The RSV1, RSV2, RSV3 bits must be all zero.
             throw new WebSocketException("Protocol error");
           }
 
@@ -124,7 +123,7 @@ class _WebSocketProtocolTransformer implements StreamTransformer, EventSink {
           } else {
             _compressed = false;
           }
-          _opcode = (byte & 0x0F);
+          _opcode = (byte & OPCODE);
 
           if (_opcode <= _WebSocketOpcode.BINARY) {
             if (_opcode == _WebSocketOpcode.CONTINUATION) {
@@ -468,6 +467,8 @@ class _WebSocketTransformerImpl implements WebSocketTransformer {
     Iterable<List<String>> extensions =
         extensionHeader.split(",").map((it) => it.split("; "));
 
+//    TODO: Use update HeaderValue.parse to accept empty values
+//    var hv = HeaderValue.parse(extensionHeader);
     var perMessageDeflate = extensions.firstWhere(
         (x) => x[0] == _WebSocketImpl.PER_MESSAGE_DEFLATE,
         orElse: () => null);
@@ -532,10 +533,10 @@ class _WebSocketPerMessageDeflate {
 
   _WebSocketPerMessageDeflate(
       {this.clientMaxWindowBits,
-      this.serverMaxWindowBits,
-      this.serverNoContextTakeover: false,
-      this.clientNoContextTakeover: false,
-      this.serverSide: false}) {
+       this.serverMaxWindowBits,
+       this.serverNoContextTakeover: false,
+       this.clientNoContextTakeover: false,
+       this.serverSide: false}) {
     if (clientMaxWindowBits == null) {
       clientMaxWindowBits = _WebSocketImpl.DEFAULT_WINDOW_BITS;
     }
