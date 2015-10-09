@@ -467,8 +467,8 @@ class _WebSocketTransformerImpl implements WebSocketTransformer {
     Iterable<List<String>> extensions =
         extensionHeader.split(",").map((it) => it.split("; "));
 
-//    TODO: Use update HeaderValue.parse to accept empty values
-//    var hv = HeaderValue.parse(extensionHeader);
+    // TODO: Use update HeaderValue.parse to accept empty values
+    // var hv = HeaderValue.parse(extensionHeader);
     var perMessageDeflate = extensions.firstWhere(
         (x) => x[0] == _WebSocketImpl.PER_MESSAGE_DEFLATE,
         orElse: () => null);
@@ -989,8 +989,10 @@ class _WebSocketImpl extends Stream with _ServiceObject implements WebSocket {
         request.headers.add("Sec-WebSocket-Protocol", protocols.toList());
       }
 
-      request.headers
-          .add("Sec-WebSocket-Extensions", compression._createHeader());
+      if(compression.enabled) {
+        request.headers
+            .add("Sec-WebSocket-Extensions", compression._createHeader());
+      }
 
       return request.close();
     }).then((response) {
