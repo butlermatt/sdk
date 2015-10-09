@@ -80,13 +80,11 @@ class CompressionOptions {
   /// response headers. Uses [serverMaxWindowBits] value if set, otherwise will
   /// attempt to use value from headers. Defaults to
   /// [WebSocket.DEFAULT_WINDOW_BITS]
-  List _createServerResponseHeader(List<String> requested) {
+  List _createServerResponseHeader(HeaderValue requested) {
     var info = new List(2);
 
-    if (requested.any((x) => x.startsWith("server_max_window_bits="))) {
-      var part = requested
-          .firstWhere((x) => x.startsWith("server_max_window_bits="))
-          .substring(23);
+    if (requested.parameters["server_max_window_bits"] != null) {
+      var part = requested.parameters["server_max_window_bits"];
       var mwb = serverMaxWindowBits == null
           ? int.parse(part,
           onError: (source) => _WebSocketImpl.DEFAULT_WINDOW_BITS)
@@ -100,12 +98,12 @@ class CompressionOptions {
   }
 
   /// Returns default values for client compression request headers.
-  List _createClientRequestHeader(List<String> requested) {
+  List _createClientRequestHeader(HeaderValue requested) {
     var info = new List(2);
 
     info[1] = _WebSocketImpl.DEFAULT_WINDOW_BITS;
     if (requested != null &&
-        requested.contains("client_max_window_bits")) {
+        requested.parameters["client_max_window_bits"] != null) {
       info[0] = "; client_max_window_bits=${info[1]}";
     } else {
       info[0] = "; client_max_window_bits";
@@ -118,7 +116,7 @@ class CompressionOptions {
   /// client request headers, returns Client compression request headers.
   /// If [requested] contains server response headers this method returns
   /// a Server compression response header.
-  List _createHeader([List<String> requested]) {
+  List _createHeader([HeaderValue requested]) {
     if (!enabled) {
       return ["", 0];
     }
@@ -128,18 +126,18 @@ class CompressionOptions {
 
     if (clientNoContextTakeover &&
         (requested != null &&
-            requested.contains("client_no_context_takeover"))) {
+            requested.parameters.containsKey("client_no_context_takeover"))) {
       header += "; client_no_context_takeover";
     }
 
     if (serverNoContextTakeover &&
         (requested != null &&
-            requested.contains("server_no_context_takeover"))) {
+            requested.parameters.containsKey("server_no_context_takeover"))) {
       header += "; server_no_context_takeover";
     }
 
     if (requested == null ||
-        requested.contains("client_max_window_bits")) {
+        requested.parameters.containsKey("client_max_window_bits")) {
       var clientList = _createClientRequestHeader(requested);
       header += clientList[0];
       info[1] = clientList[1];

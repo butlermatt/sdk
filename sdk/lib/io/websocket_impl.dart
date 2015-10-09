@@ -464,22 +464,15 @@ class _WebSocketTransformerImpl implements WebSocketTransformer {
       extensionHeader = "";
     }
 
-    Iterable<List<String>> extensions =
-        extensionHeader.split(",").map((it) => it.split("; "));
-
-    // TODO: Use update HeaderValue.parse to accept empty values
-    // var hv = HeaderValue.parse(extensionHeader);
-    var perMessageDeflate = extensions.firstWhere(
-        (x) => x[0] == _WebSocketImpl.PER_MESSAGE_DEFLATE,
-        orElse: () => null);
-    if (compression.enabled && perMessageDeflate != null) {
-      var info = compression._createHeader(perMessageDeflate);
+    var hv = HeaderValue.parse(extensionHeader);
+    if (compression.enabled && hv.value == _WebSocketImpl.PER_MESSAGE_DEFLATE) {
+      var info = compression._createHeader(hv);
 
       response.headers.add("Sec-WebSocket-Extensions", info[0]);
       var serverNoContextTakeover =
-          perMessageDeflate.contains("server_no_context_takeover");
+          hv.parameters.containsKey("server_no_context_takeover");
       var clientNoContextTakeover =
-          perMessageDeflate.contains("client_no_context_takeover");
+          hv.parameters.containsKey("client_no_context_takeover");
       var deflate = new _WebSocketPerMessageDeflate(
           serverNoContextTakeover: serverNoContextTakeover,
           clientNoContextTakeover: clientNoContextTakeover,
