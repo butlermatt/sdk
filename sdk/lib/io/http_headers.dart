@@ -681,6 +681,7 @@ class _HeaderValue implements HeaderValue {
       while (!done()) {
         if (s[index] == " " ||
             s[index] == "\t" ||
+            s[index] == "," ||
             s[index] == parameterSeparator) break;
         index++;
       }
@@ -705,7 +706,10 @@ class _HeaderValue implements HeaderValue {
       String parseParameterName() {
         int start = index;
         while (!done()) {
-          if (s[index] == " " || s[index] == "\t" || s[index] == "=") break;
+          if (s[index] == " " ||
+              s[index] == "\t" ||
+              s[index] == "=" ||
+              s[index] == ",") break;
           index++;
         }
         return s.substring(start, index).toLowerCase();
@@ -735,7 +739,8 @@ class _HeaderValue implements HeaderValue {
           return sb.toString();
         } else {
           // Parse non-quoted value.
-          return parseValue();
+          var val = parseValue();
+          return val == "" ? null : val;
         }
       }
 
@@ -744,7 +749,7 @@ class _HeaderValue implements HeaderValue {
         if (done()) return;
         String name = parseParameterName();
         skipWS();
-        expect("=");
+        maybeExpect("=");
         skipWS();
         String value = parseParameterValue();
         if (name == 'charset' && this is _ContentType) {
@@ -754,6 +759,8 @@ class _HeaderValue implements HeaderValue {
         parameters[name] = value;
         skipWS();
         if (done()) return;
+        // TODO: Implement support for multi-valued parameters.
+        if(s[index] == ",") return;
         expect(parameterSeparator);
       }
     }
