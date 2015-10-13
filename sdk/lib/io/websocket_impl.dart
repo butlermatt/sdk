@@ -590,9 +590,18 @@ class _WebSocketPerMessageDeflate {
     var reuse =
         !(serverSide ? serverNoContextTakeover : clientNoContextTakeover);
     var result = [];
+    var buffer = new Uint8List(msg.length);
     var out;
 
-    encoder.process(msg, 0, msg.length);
+    for(var i = 0; i < msg.length; i++) {
+      if (msg[i] < 0 || 255 < msg[i]) {
+        throw new ArgumentError("List element is not a byte value "
+            "(value ${msg[i]} at index $i)");
+      }
+      buffer[i] = msg[i];
+    }
+
+    encoder.process(buffer, 0, buffer.length);
 
     while ((out = encoder.processed(flush: reuse)) != null) {
       result.addAll(out);
