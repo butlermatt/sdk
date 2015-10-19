@@ -115,14 +115,13 @@ class _WebSocketProtocolTransformer implements StreamTransformer, EventSink {
       if (_state <= LEN_REST) {
         if (_state == START) {
           _fin = (byte & FIN) != 0;
-          var rsv = (byte & (RSV1 | RSV2 | RSV3)) >> 4;
 
-          if (rsv != 0 && rsv != 4) {
-            // The RSV1, RSV2, RSV3 bits must be all zero.
+          if((byte & (RSV2 | RSV3)) != 0) {
+            // The RSV2, RSV3 bits must both be zero.
             throw new WebSocketException("Protocol error");
           }
 
-          if (rsv == 4) {
+          if ((byte & RSV1) != 0) {
             _compressed = true;
           } else {
             _compressed = false;
@@ -297,8 +296,6 @@ class _WebSocketProtocolTransformer implements StreamTransformer, EventSink {
     }
   }
 
-  static Utf8Decoder _utfDecoder;
-
   void _messageFrameEnd() {
     if (_fin) {
       var bytes = _payload.takeBytes();
@@ -308,10 +305,7 @@ class _WebSocketProtocolTransformer implements StreamTransformer, EventSink {
 
       switch (_currentMessageType) {
         case _WebSocketMessageType.TEXT:
-          if (_utfDecoder == null) {
-            _utfDecoder = new Utf8Decoder();
-          }
-          _eventSink.add(_utfDecoder.convert(bytes));
+          _eventSink.add(UTF8.decode(bytes));
           break;
         case _WebSocketMessageType.BINARY:
           _eventSink.add(bytes);
@@ -529,19 +523,11 @@ class _WebSocketPerMessageDeflate {
   _Filter encoder;
 
   _WebSocketPerMessageDeflate(
-      {this.clientMaxWindowBits,
-       this.serverMaxWindowBits,
+      {this.clientMaxWindowBits: _WebSocketImpl.DEFAULT_WINDOW_BITS,
+       this.serverMaxWindowBits: _WebSocketImpl.DEFAULT_WINDOW_BITS,
        this.serverNoContextTakeover: false,
        this.clientNoContextTakeover: false,
-       this.serverSide: false}) {
-    if (clientMaxWindowBits == null) {
-      clientMaxWindowBits = _WebSocketImpl.DEFAULT_WINDOW_BITS;
-    }
-
-    if (serverMaxWindowBits == null) {
-      serverMaxWindowBits = _WebSocketImpl.DEFAULT_WINDOW_BITS;
-    }
-  }
+       this.serverSide: false});
 
   void _ensureDecoder() {
     if (decoder == null) {
@@ -594,15 +580,24 @@ class _WebSocketPerMessageDeflate {
     var reuse =
         !(serverSide ? serverNoContextTakeover : clientNoContextTakeover);
     var result = [];
-    var buffer = new Uint8List(msg.length);
+    Uint8List buffer;
     var out;
 
-    for(var i = 0; i < msg.length; i++) {
-      if (msg[i] < 0 || 255 < msg[i]) {
+    if(msg is! Uint8List) {
+      buffer = new Uint8List(msg.length);
+      for (var i = 0; i < msg.length; i++) {
+        if (msg[i] < 0 || 255 < msg[i]) {
+          throw new ArgumentError("List element is not a byte value "
+              "(value ${msg[i]} at index $i)");
+        }
+        buffer[i] = msg[i];
+      }
+    } else {
+      buffer = msg;
+      if (buffer.any((el) => el < 0 || 255 < el)) {
         throw new ArgumentError("List element is not a byte value "
             "(value ${msg[i]} at index $i)");
       }
-      buffer[i] = msg[i];
     }
 
     encoder.process(buffer, 0, buffer.length);
@@ -659,10 +654,7 @@ class _WebSocketOutgoingTransformer implements StreamTransformer, EventSink {
     if (message != null) {
       if (message is String) {
         opcode = _WebSocketOpcode.TEXT;
-        if (_utfEncoder == null) {
-          _utfEncoder = new Utf8Encoder();
-        }
-        data = _utfEncoder.convert(message);
+        data = UTF8.encode(message);
       } else {
         if (message is! List<int>) {
           throw new ArgumentError(message);
@@ -679,8 +671,6 @@ class _WebSocketOutgoingTransformer implements StreamTransformer, EventSink {
     }
     addFrame(opcode, data);
   }
-
-  static Utf8Encoder _utfEncoder;
 
   void addError(Object error, [StackTrace stackTrace]) =>
       _eventSink.addError(error, stackTrace);
@@ -725,13 +715,10 @@ class _WebSocketOutgoingTransformer implements StreamTransformer, EventSink {
     Uint8List header = new Uint8List(headerSize);
     int index = 0;
 
-    var rsv = 0;
-    if (compressed) {
-      rsv = 4;
-    }
-
     // Set FIN and opcode.
-    var hoc = (1 << 7) | (rsv % 8) << 4 | (opcode % 128);
+    var hoc = _WebSocketProtocolTransformer.FIN
+              | (compressed ? _WebSocketProtocolTransformer.RSV1 : 0)
+              | (opcode & _WebSocketProtocolTransformer.OPCODE);
 
     header[index++] = hoc;
     // Determine size and position of length field.
@@ -995,7 +982,7 @@ class _WebSocketImpl extends Stream with _ServiceObject implements WebSocket {
         request.headers.add("Sec-WebSocket-Protocol", protocols.toList());
       }
 
-      if(compression.enabled) {
+      if (compression.enabled) {
         request.headers
             .add("Sec-WebSocket-Extensions", compression._createHeader());
       }
