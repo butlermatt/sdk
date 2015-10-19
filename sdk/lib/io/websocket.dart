@@ -83,14 +83,19 @@ class CompressionOptions {
   List _createServerResponseHeader(HeaderValue requested) {
     var info = new List(2);
 
+    int mwb;
     var part = requested.parameters[_serverMaxWindowBits];
     if (part != null) {
-      var mwb = serverMaxWindowBits == null
-          ? int.parse(part,
-          onError: (source) => _WebSocketImpl.DEFAULT_WINDOW_BITS)
-          : serverMaxWindowBits;
-      info[0] = "; server_max_window_bits=${mwb}";
-      info[1] = mwb;
+      if(part.length >= 2 && part.startsWith('0')) {
+        mwb = _WebSocketImpl.DEFAULT_WINDOW_BITS;
+      } else {
+        mwb = serverMaxWindowBits == null
+            ? int.parse(part,
+                        onError: (source) => _WebSocketImpl.DEFAULT_WINDOW_BITS)
+            : serverMaxWindowBits;
+        info[0] = "; server_max_window_bits=${mwb}";
+        info[1] = mwb;
+      }
     } else {
       info[1] = _WebSocketImpl.DEFAULT_WINDOW_BITS;
     }
@@ -191,6 +196,10 @@ abstract class WebSocketTransformer
    * [protocolSelector] is should return either a [String] or a [Future]
    * completing with a [String]. The [String] must exist in the list of
    * protocols.
+   *
+   * If [compression] is provided, the [WebSocket] created will be configured
+   * to negotiate with the specified [CompressionOptions]. If none is specified
+   * then the [WebSocket] will be created with the default [CompressionOptions].
    */
   factory WebSocketTransformer(
           {protocolSelector(List<String> protocols),
@@ -209,6 +218,10 @@ abstract class WebSocketTransformer
    * [protocolSelector] is should return either a [String] or a [Future]
    * completing with a [String]. The [String] must exist in the list of
    * protocols.
+   *
+   * If [compression] is provided, the [WebSocket] created will be configured
+   * to negotiate with the specified [CompressionOptions]. If none is specified
+   * then the [WebSocket] will be created with the default [CompressionOptions].
    */
   static Future<WebSocket> upgrade(HttpRequest request,
       {protocolSelector(List<String> protocols),
@@ -307,6 +320,10 @@ abstract class WebSocket implements Stream, StreamSink {
    * [serverSide] must be passed explicitly. If it's `false`, the WebSocket will
    * act as the client and mask the messages it sends. If it's `true`, it will
    * act as the server and will not mask its messages.
+   *
+   * If [compression] is provided, the [WebSocket] created will be configured
+   * to negotiate with the specified [CompressionOptions]. If none is specified
+   * then the [WebSocket] will be created with the default [CompressionOptions].
    */
   factory WebSocket.fromUpgradedSocket(Socket socket,
       {String protocol,
