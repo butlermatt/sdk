@@ -72,8 +72,8 @@ class CompressionOptions {
   const CompressionOptions(
       {this.clientNoContextTakeover: false,
       this.serverNoContextTakeover: false,
-      this.clientMaxWindowBits,
-      this.serverMaxWindowBits,
+      this.clientMaxWindowBits: _WebsocketImpl.DEFAULT_WINDOW_BITS,
+      this.serverMaxWindowBits: _WebsocketImpl.DEFAULT_WINDOW_BITS,
       this.enabled: true});
 
   /// Parses list of requested server headers to return server compression
@@ -83,8 +83,8 @@ class CompressionOptions {
   List _createServerResponseHeader(HeaderValue requested) {
     var info = new List(2);
 
-    if (requested.parameters["server_max_window_bits"] != null) {
-      var part = requested.parameters["server_max_window_bits"];
+    var part = requested.parameters[_serverMaxWindowBits];
+    if (part != null) {
       var mwb = serverMaxWindowBits == null
           ? int.parse(part,
           onError: (source) => _WebSocketImpl.DEFAULT_WINDOW_BITS)
@@ -103,7 +103,7 @@ class CompressionOptions {
 
     info[1] = _WebSocketImpl.DEFAULT_WINDOW_BITS;
     if (requested != null &&
-        requested.parameters["client_max_window_bits"] != null) {
+        requested.parameters[_clientMaxWindowBits] != null) {
       info[0] = "; client_max_window_bits=${info[1]}";
     } else {
       info[0] = "; client_max_window_bits";
@@ -126,18 +126,18 @@ class CompressionOptions {
 
     if (clientNoContextTakeover &&
         (requested != null &&
-            requested.parameters.containsKey("client_no_context_takeover"))) {
+            requested.parameters.containsKey(_clientNoContextTakeover))) {
       header += "; client_no_context_takeover";
     }
 
     if (serverNoContextTakeover &&
         (requested != null &&
-            requested.parameters.containsKey("server_no_context_takeover"))) {
+            requested.parameters.containsKey(_serverNoContextTakeover))) {
       header += "; server_no_context_takeover";
     }
 
     if (requested == null ||
-        requested.parameters.containsKey("client_max_window_bits")) {
+        requested.parameters.containsKey(_clientMaxWindowBits)) {
       var clientList = _createClientRequestHeader(requested);
       header += clientList[0];
       info[1] = clientList[1];

@@ -5,6 +5,10 @@
 part of dart.io;
 
 const String _webSocketGUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
+const String _clientNoContextTakeover = "client_no_context_takeover";
+const String _serverNoContextTakeover = "server_no_context_takeover";
+const String _clientMaxWindowBits = "client_max_window_bits";
+const String _serverMaxWindowBits = "server_max_window_bits";
 
 // Matches _WebSocketOpcode.
 class _WebSocketMessageType {
@@ -470,9 +474,9 @@ class _WebSocketTransformerImpl implements WebSocketTransformer {
 
       response.headers.add("Sec-WebSocket-Extensions", info[0]);
       var serverNoContextTakeover =
-          hv.parameters.containsKey("server_no_context_takeover");
+          hv.parameters.containsKey(_serverNoContextTakeover);
       var clientNoContextTakeover =
-          hv.parameters.containsKey("client_no_context_takeover");
+          hv.parameters.containsKey(_clientNoContextTakeover);
       var deflate = new _WebSocketPerMessageDeflate(
           serverNoContextTakeover: serverNoContextTakeover,
           clientNoContextTakeover: clientNoContextTakeover,
@@ -1054,8 +1058,8 @@ class _WebSocketImpl extends Stream with _ServiceObject implements WebSocket {
     if (compression.enabled &&
         extensions.any((x) => x[0] == PER_MESSAGE_DEFLATE)) {
       var opts = extensions.firstWhere((x) => x[0] == PER_MESSAGE_DEFLATE);
-      var serverNoContextTakeover = opts.contains("server_no_context_takeover");
-      var clientNoContextTakeover = opts.contains("client_no_context_takeover");
+      var serverNoContextTakeover = opts.contains(_serverNoContextTakeover);
+      var clientNoContextTakeover = opts.contains(_clientNoContextTakeover);
 
       int getWindowBits(String type) {
         var o = opts.firstWhere((x) => x.startsWith("${type}_max_window_bits="),
