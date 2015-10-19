@@ -72,8 +72,8 @@ class CompressionOptions {
   const CompressionOptions(
       {this.clientNoContextTakeover: false,
       this.serverNoContextTakeover: false,
-      this.clientMaxWindowBits: _WebsocketImpl.DEFAULT_WINDOW_BITS,
-      this.serverMaxWindowBits: _WebsocketImpl.DEFAULT_WINDOW_BITS,
+      this.clientMaxWindowBits: _WebSocketImpl.DEFAULT_WINDOW_BITS,
+      this.serverMaxWindowBits: _WebSocketImpl.DEFAULT_WINDOW_BITS,
       this.enabled: true});
 
   /// Parses list of requested server headers to return server compression
