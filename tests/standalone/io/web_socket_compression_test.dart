@@ -37,30 +37,37 @@ class SecurityConfiguration {
       // TODO(whesse): Add client context argument to WebSocket.connect
       WebSocket.connect('${secure ? "wss" : "ws"}://$HOST_NAME:$port/');
 
-  void testCompressionSupport(bool enabled, bool allowContextTakeover) {
+  void testCompressionSupport({server: false,
+        client: false,
+        contextTakeover: false}) {
     asyncStart();
 
-    var options = new CompressionOptions(
-        enabled: enabled,
-        serverNoContextTakeover: allowContextTakeover,
-        clientNoContextTakeover: allowContextTakeover);
+    var clientOptions = new CompressionOptions(
+        enabled: client,
+        serverNoContextTakeover: contextTakeover,
+        clientNoContextTakeover: contextTakeover);
+    var serverOptions = new CompressionOptions(
+        enabled: server,
+        serverNoContextTakeover: contextTakeover,
+        clientNoContextTakeover: contextTakeover);
 
     createServer().then((server) {
       server.listen((request) {
         Expect.isTrue(WebSocketTransformer.isUpgradeRequest(request));
-        WebSocketTransformer.upgrade(request, compression: options).then((webSocket) {
-          webSocket.listen((message) {
-            Expect.equals("Hello World", message);
+        WebSocketTransformer.upgrade(request, compression: serverOptions)
+                            .then((webSocket) {
+            webSocket.listen((message) {
+              Expect.equals("Hello World", message);
 
-            webSocket.add(message);
-            webSocket.close();
-          });
-          webSocket.add("Hello World");
+              webSocket.add(message);
+              webSocket.close();
+            });
+            webSocket.add("Hello World");
         });
       });
 
       var url = '${secure ? "wss" : "ws"}://$HOST_NAME:${server.port}/';
-      WebSocket.connect(url, compression: options).then((websocket) {
+      WebSocket.connect(url, compression: clientOptions).then((websocket) {
         var future = websocket.listen((message) {
           Expect.equals("Hello World", message);
         }).asFuture();
@@ -74,9 +81,16 @@ class SecurityConfiguration {
   }
 
   void runTests() {
-    testCompressionSupport(false, false);
-    testCompressionSupport(true, false);
-    testCompressionSupport(true, true);
+    // No compression or takeover
+    testCompressionSupport();
+    // compression no takeover
+    testCompressionSupport(server: true, client: true);
+    // compression and context takeover.
+    testCompressionSupport(server: true, client: true, contextTakeover: true);
+    // Compression on client but not server. No take over
+    testCompressionSupport(client: true);
+    // Compression on server but not client.
+    testCompressionSupport(server: true);
   }
 }
 
