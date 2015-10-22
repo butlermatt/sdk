@@ -696,7 +696,7 @@ class _HeaderValue implements HeaderValue {
     }
 
     void maybeExpect(String expected) {
-      if (s[index] == expected) index++;
+      if (!done() && s[index] == expected) index++;
     }
 
     void parseParameters() {
@@ -716,7 +716,7 @@ class _HeaderValue implements HeaderValue {
       }
 
       String parseParameterValue() {
-        if (s[index] == "\"") {
+        if (!done() && s[index] == "\"") {
           // Parse quoted value.
           StringBuffer sb = new StringBuffer();
           index++;

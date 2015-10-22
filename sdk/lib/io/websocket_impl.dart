@@ -1039,30 +1039,21 @@ class _WebSocketImpl extends Stream with _ServiceObject implements WebSocket {
       extensionHeader = "";
     }
 
-    Iterable<List<String>> extensions =
-        extensionHeader.split(", ").map((it) => it.split("; "));
+    var hv = HeaderValue.parse(extensionHeader);
 
-    if (compression.enabled &&
-        extensions.any((x) => x[0] == PER_MESSAGE_DEFLATE)) {
-      var opts = extensions.firstWhere((x) => x[0] == PER_MESSAGE_DEFLATE);
-      var serverNoContextTakeover = opts.contains(_serverNoContextTakeover);
-      var clientNoContextTakeover = opts.contains(_clientNoContextTakeover);
+    if (compression.enabled && hv.value == PER_MESSAGE_DEFLATE) {
+      var serverNoContextTakeover =
+          hv.parameters.containsKey(_serverNoContextTakeover);
+      var clientNoContextTakeover =
+          hv.parameters.containsKey(_clientNoContextTakeover);
 
       int getWindowBits(String type) {
-        var o = opts.firstWhere((x) => x.startsWith("${type}_max_window_bits="),
-            orElse: () => null);
-
+        var o = hv.parameters['${type}_max_window_bits'];
         if (o == null) {
           return DEFAULT_WINDOW_BITS;
         }
 
-        try {
-          o = o.substring("${type}_max_window_bits=".length);
-          o = int.parse(o);
-        } catch (e) {
-          return DEFAULT_WINDOW_BITS;
-        }
-
+        o = int.parse(o, onError: (s) => DEFAULT_WINDOW_BITS);
         return o;
       }
 
