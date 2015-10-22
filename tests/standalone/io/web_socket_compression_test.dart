@@ -17,6 +17,8 @@ import "package:crypto/crypto.dart";
 import "package:expect/expect.dart";
 import "package:path/path.dart";
 
+const WEB_SOCKET_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
+
 const String HOST_NAME = 'localhost';
 
 class SecurityConfiguration {
@@ -80,6 +82,47 @@ class SecurityConfiguration {
     });
   }
 
+  void testCompressionHeaders() {
+    asyncStart();
+    createServer().then((server) {
+      server.listen((request) {
+        Expect.equals('Upgrade', request.headers.value(HttpHeaders.CONNECTION));
+        Expect.equals('websocket', request.headers.value(HttpHeaders.UPGRADE));
+
+        var key = request.headers.value('Sec-WebSocket-Key');
+        var sha1 = new SHA1()..add("$key$WEB_SOCKET_GUID".codeUnits);
+        var accept = CryptoUtils.bytesToBase64(sha1.close());
+        request.response
+            ..statusCode = HttpStatus.SWITCHING_PROTOCOLS
+            ..headers.add(HttpHeaders.CONNECTION, "Upgrade")
+            ..headers.add(HttpHeaders.UPGRADE, "websocket")
+            ..headers.add("Sec-WebSocket-Accept", accept)
+            ..headers.add("Sec-WebSocket-Extensions",
+              "permessage-deflate;"
+              // Test quoted values and space padded =
+              'server_max_window_bits="10"; client_max_window_bits = 12'
+              'client_no_context_takeover; server_no_context_takeover');
+        request.response.contentLength = 0;
+        request.response.detachSocket().then((socket) {
+          return new WebSocket.fromUpgradedSocket(socket, serverSide: true);
+        }).then((websocket) {
+          websocket.add("Hello");
+          websocket.close();
+          asyncEnd();
+        });
+      });
+
+      var url = '${secure ? "wss" : "ws"}://$HOST_NAME:${server.port}/';
+
+      WebSocket.connect(url).then((websocket) {
+        return websocket.listen((message) {
+          Expect.equals("Hello", message);
+          websocket.close();
+        }).asFuture();
+      }).then((_) => server.close());
+    });
+  }
+
   void runTests() {
     // No compression or takeover
     testCompressionSupport();
@@ -91,6 +134,8 @@ class SecurityConfiguration {
     testCompressionSupport(client: true);
     // Compression on server but not client.
     testCompressionSupport(server: true);
+
+    testCompressionHeaders();
   }
 }
 
