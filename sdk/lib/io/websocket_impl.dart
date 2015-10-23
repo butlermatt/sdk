@@ -584,12 +584,13 @@ class _WebSocketPerMessageDeflate {
     var out;
 
     if (msg is! Uint8List) {
-      if (msg.any((el) => el < 0 || el > 255)) {
-        throw new ArgumentError("List element is not a byte value "
-            "(value ${msg[i]} at index $i)");
-      } else {
-        buffer = new Uint8List.fromList(msg);
+      for (var i = 0; i < msg.length; i++) {
+        if (msg[i] < 0 || 255 < msg[i]) {
+          throw new ArgumentError("List element is not a byte value "
+              "(value ${msg[i]} at index $i)");
+        }
       }
+      buffer = new Uint8List.fromList(msg);
     } else {
       buffer = msg;
     }
