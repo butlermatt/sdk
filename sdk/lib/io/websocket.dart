@@ -86,8 +86,8 @@ class CompressionOptions {
     int mwb;
     var part = requested.parameters[_serverMaxWindowBits];
     if (part != null) {
-      if(part.length >= 2 && part.startsWith('0')) {
-        mwb = _WebSocketImpl.DEFAULT_WINDOW_BITS;
+      if (part.length >= 2 && part.startsWith('0')) {
+        throw new ArgumentError("Illegal 0 padding on value.");
       } else {
         mwb = serverMaxWindowBits == null
             ? int.parse(part,

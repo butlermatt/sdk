@@ -583,21 +583,14 @@ class _WebSocketPerMessageDeflate {
     Uint8List buffer;
     var out;
 
-    if(msg is! Uint8List) {
-      buffer = new Uint8List(msg.length);
-      for (var i = 0; i < msg.length; i++) {
-        if (msg[i] < 0 || 255 < msg[i]) {
-          throw new ArgumentError("List element is not a byte value "
-              "(value ${msg[i]} at index $i)");
-        }
-        buffer[i] = msg[i];
-      }
+    if (msg is! Uint8List) {
+      buffer = new Uint8List.fromList(msg);
     } else {
       buffer = msg;
-      if (buffer.any((el) => el < 0 || 255 < el)) {
-        throw new ArgumentError("List element is not a byte value "
-            "(value ${msg[i]} at index $i)");
-      }
+    }
+    if (buffer.any((el) => el < 0 || 255 < el)) {
+      throw new ArgumentError("List element is not a byte value "
+          "(value ${msg[i]} at index $i)");
     }
 
     encoder.process(buffer, 0, buffer.length);
@@ -1048,7 +1041,7 @@ class _WebSocketImpl extends Stream with _ServiceObject implements WebSocket {
           hv.parameters.containsKey(_clientNoContextTakeover);
 
       int getWindowBits(String type) {
-        var o = hv.parameters['${type}_max_window_bits'];
+        var o = hv.parameters[type];
         if (o == null) {
           return DEFAULT_WINDOW_BITS;
         }
@@ -1058,8 +1051,8 @@ class _WebSocketImpl extends Stream with _ServiceObject implements WebSocket {
       }
 
       return new _WebSocketPerMessageDeflate(
-          clientMaxWindowBits: getWindowBits("client"),
-          serverMaxWindowBits: getWindowBits("server"),
+          clientMaxWindowBits: getWindowBits(_clientMaxWindowBits),
+          serverMaxWindowBits: getWindowBits(_serverMaxWindowBits),
           clientNoContextTakeover: clientNoContextTakeover,
           serverNoContextTakeover: serverNoContextTakeover);
     }

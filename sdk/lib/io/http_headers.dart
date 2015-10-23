@@ -696,7 +696,7 @@ class _HeaderValue implements HeaderValue {
     }
 
     void maybeExpect(String expected) {
-      if (!done() && s[index] == expected) index++;
+      if (s[index] == expected) index++;
     }
 
     void parseParameters() {
@@ -749,8 +749,16 @@ class _HeaderValue implements HeaderValue {
         if (done()) return;
         String name = parseParameterName();
         skipWS();
+        if (done()) {
+          parameters[name] = null;
+          return;
+        }
         maybeExpect("=");
         skipWS();
+        if(done()) {
+          parameter[name] = null;
+          return;
+        }
         String value = parseParameterValue();
         if (name == 'charset' && this is _ContentType) {
           // Charset parameter of ContentTypes are always lower-case.
