@@ -630,10 +630,11 @@ class _HeaderValue implements HeaderValue {
 
   static _HeaderValue parse(String value,
                             {parameterSeparator: ";",
+                             valueSeparator: null,
                              preserveBackslash: false}) {
     // Parse the string.
     var result = new _HeaderValue();
-    result._parse(value, parameterSeparator, preserveBackslash);
+    result._parse(value, parameterSeparator, valueSeparator, preserveBackslash);
     return result;
   }
 
@@ -664,7 +665,10 @@ class _HeaderValue implements HeaderValue {
     return sb.toString();
   }
 
-  void _parse(String s, String parameterSeparator, bool preserveBackslash) {
+  void _parse(String s,
+        String parameterSeparator,
+        String valueSeparator,
+        bool preserveBackslash) {
     int index = 0;
 
     bool done() => index == s.length;
@@ -681,7 +685,7 @@ class _HeaderValue implements HeaderValue {
       while (!done()) {
         if (s[index] == " " ||
             s[index] == "\t" ||
-            s[index] == "," ||
+            s[index] == valueSeparator ||
             s[index] == parameterSeparator) break;
         index++;
       }
@@ -709,7 +713,7 @@ class _HeaderValue implements HeaderValue {
           if (s[index] == " " ||
               s[index] == "\t" ||
               s[index] == "=" ||
-              s[index] == ",") break;
+              s[index] == valueSeparator) break;
           index++;
         }
         return s.substring(start, index).toLowerCase();
@@ -756,7 +760,7 @@ class _HeaderValue implements HeaderValue {
         maybeExpect("=");
         skipWS();
         if(done()) {
-          parameter[name] = null;
+          parameters[name] = null;
           return;
         }
         String value = parseParameterValue();
@@ -768,7 +772,7 @@ class _HeaderValue implements HeaderValue {
         skipWS();
         if (done()) return;
         // TODO: Implement support for multi-valued parameters.
-        if(s[index] == ",") return;
+        if(s[index] == valueSeparator) return;
         expect(parameterSeparator);
       }
     }
@@ -815,7 +819,7 @@ class _ContentType extends _HeaderValue implements ContentType {
 
   static _ContentType parse(String value) {
     var result = new _ContentType._();
-    result._parse(value, ";", false);
+    result._parse(value, ";", null, false);
     int index = result._value.indexOf("/");
     if (index == -1 || index == (result._value.length - 1)) {
       result._primaryType = result._value.trim().toLowerCase();

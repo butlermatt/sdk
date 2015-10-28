@@ -462,7 +462,7 @@ class _WebSocketTransformerImpl implements WebSocketTransformer {
       extensionHeader = "";
     }
 
-    var hv = HeaderValue.parse(extensionHeader);
+    var hv = HeaderValue.parse(extensionHeader, valueSeparator: ',');
     if (compression.enabled && hv.value == _WebSocketImpl.PER_MESSAGE_DEFLATE) {
       var info = compression._createHeader(hv);
 
@@ -1034,7 +1034,7 @@ class _WebSocketImpl extends Stream with _ServiceObject implements WebSocket {
       extensionHeader = "";
     }
 
-    var hv = HeaderValue.parse(extensionHeader);
+    var hv = HeaderValue.parse(extensionHeader, valueSeparator: ',');
 
     if (compression.enabled && hv.value == PER_MESSAGE_DEFLATE) {
       var serverNoContextTakeover =
