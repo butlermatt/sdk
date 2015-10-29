@@ -24,6 +24,11 @@ const String HOST_NAME = 'localhost';
 class SecurityConfiguration {
   final bool secure;
 
+  SecurityContext serverContext = new SecurityContext()
+    ..useCertificateChain(localFile('certificates/server_chain.pem'))
+    ..usePrivateKey(localFile('certificates/server_key.pem'),
+                    password: 'dartdart');
+                    
   SecurityConfiguration({bool this.secure});
 
   Future<HttpServer> createServer({int backlog: 0}) =>
