@@ -549,7 +549,7 @@ class _WebSocketPerMessageDeflate {
     }
   }
 
-  List<int> processIncomingMessage(List<int> msg) {
+  Uint8List processIncomingMessage(List<int> msg) {
     _ensureDecoder();
 
     var data = [];
@@ -572,7 +572,7 @@ class _WebSocketPerMessageDeflate {
       decoder.end();
       decoder = null;
     }
-    return result;
+    return new Uint8List.fromList(result);
   }
 
   List<int> processOutgoingMessage(List<int> msg) {
