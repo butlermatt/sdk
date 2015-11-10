@@ -110,10 +110,11 @@ class CompressionOptions {
   List _createClientRequestHeader(HeaderValue requested, int size) {
     var info = "";
 
-    if (requested != null &&
-        requested.parameters.containsKey(_clientMaxWindowBits) == true) {
+    // If responding to a valid request, specify size
+    if (requested != null) {
       info = "; client_max_window_bits=$size";
     } else {
+      // Client request. Specify default
       info = "; client_max_window_bits";
     }
 
