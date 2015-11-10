@@ -458,9 +458,7 @@ class _WebSocketTransformerImpl implements WebSocketTransformer {
       HttpResponse response, CompressionOptions compression) {
     var extensionHeader = request.headers.value("Sec-WebSocket-Extensions");
 
-    if (extensionHeader == null) {
-      extensionHeader = "";
-    }
+    extensionHeader ??= "";
 
     var hv = HeaderValue.parse(extensionHeader, valueSeparator: ',');
     if (compression.enabled && hv.value == _WebSocketImpl.PER_MESSAGE_DEFLATE) {

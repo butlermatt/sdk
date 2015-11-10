@@ -84,7 +84,10 @@ class CompressionOptions {
     var info = new List(2);
 
     int mwb;
-    var part = requested.parameters[_serverMaxWindowBits];
+    String part;
+    if (requested?.parameters != null) {
+      part = requested.parameters[_serverMaxWindowBits];
+    }
     if (part != null) {
       if (part.length >= 2 && part.startsWith('0')) {
         throw new ArgumentError("Illegal 0 padding on value.");
@@ -97,21 +100,21 @@ class CompressionOptions {
         info[1] = mwb;
       }
     } else {
+      info[0] = "";
       info[1] = _WebSocketImpl.DEFAULT_WINDOW_BITS;
     }
     return info;
   }
 
   /// Returns default values for client compression request headers.
-  List _createClientRequestHeader(HeaderValue requested) {
-    var info = new List(2);
+  List _createClientRequestHeader(HeaderValue requested, int size) {
+    var info = "";
 
-    info[1] = _WebSocketImpl.DEFAULT_WINDOW_BITS;
     if (requested != null &&
-        requested.parameters[_clientMaxWindowBits] != null) {
-      info[0] = "; client_max_window_bits=${info[1]}";
+        requested.parameters.containsKey(_clientMaxWindowBits) == true) {
+      info = "; client_max_window_bits=$size";
     } else {
-      info[0] = "; client_max_window_bits";
+      info = "; client_max_window_bits";
     }
 
     return info;
@@ -141,19 +144,14 @@ class CompressionOptions {
       header += "; server_no_context_takeover";
     }
 
-    if (requested == null ||
-        requested.parameters.containsKey(_clientMaxWindowBits)) {
-      var clientList = _createClientRequestHeader(requested);
-      header += clientList[0];
-      info[1] = clientList[1];
-    } else {
-      var headerList = _createServerResponseHeader(requested);
-      header += headerList[0];
-      info[1] = headerList[1];
-    }
+    var headerList = _createServerResponseHeader(requested);
+    header += headerList[0];
+    info[1] = headerList[1];
+
+    var clientList = _createClientRequestHeader(requested, info[1]);
+    header += clientList;
 
     info[0] = header;
-
     return info;
   }
 }
