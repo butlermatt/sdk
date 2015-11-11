@@ -107,7 +107,7 @@ class CompressionOptions {
   }
 
   /// Returns default values for client compression request headers.
-  List _createClientRequestHeader(HeaderValue requested, int size) {
+  String _createClientRequestHeader(HeaderValue requested, int size) {
     var info = "";
 
     // If responding to a valid request, specify size
